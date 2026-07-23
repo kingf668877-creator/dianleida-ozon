@@ -16,9 +16,7 @@ function fixRussianEncoding(str) {
   if (!str) return str;
   if (typeof str !== 'string') return str;
   try {
-    // 检查是否包含俄文字符（如果已经是正确的UTF-8俄文，则直接返回）
     if (/[\u0400-\u04FF]/.test(str)) return str;
-    // 将字符串按 latin-1 解释为字节，再用 UTF-8 解码
     const bytes = new Uint8Array(str.length);
     for (let i = 0; i < str.length; i++) {
       bytes[i] = str.charCodeAt(i) & 0xFF;
@@ -275,33 +273,36 @@ body {
 }
 .results-section.active { display: block; }
 
-/* Analysis Steps */
+/* Analysis Card - 新版样式 */
 .analysis-card {
   background: linear-gradient(135deg, #F5F3FF 0%, #EDE9FE 100%);
   border-radius: 16px;
   padding: 24px;
   margin-bottom: 24px;
+  border: 1px solid rgba(124, 58, 237, 0.1);
 }
 .analysis-header {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
 }
 .analysis-header-icon {
   width: 36px; height: 36px;
-  background: #6366F1;
+  background: linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%);
   border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
   color: #fff;
   font-size: 18px;
+  flex-shrink: 0;
 }
+.analysis-header-text { flex: 1; min-width: 0; }
 .analysis-header-title { font-size: 18px; font-weight: 600; color: #4C1D95; }
-.analysis-header-sub { font-size: 13px; color: #7C3AED; }
+.analysis-header-sub { font-size: 13px; color: #7C3AED; margin-top: 2px; }
 .analysis-timing {
-  margin-top: 6px;
+  margin-top: 10px;
   display: none;
   flex-wrap: wrap;
   gap: 6px;
@@ -320,6 +321,33 @@ body {
 }
 .timing-chip strong { font-weight: 700; color: #4C1D95; }
 
+/* 分析过程文字区域 */
+.analysis-content {
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 12px;
+  padding: 16px 18px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: #5B21B6;
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid rgba(124, 58, 237, 0.08);
+}
+.analysis-content::-webkit-scrollbar { width: 6px; }
+.analysis-content::-webkit-scrollbar-track { background: transparent; }
+.analysis-content::-webkit-scrollbar-thumb { background: #C4B5FD; border-radius: 3px; }
+
+.analysis-content .line {
+  opacity: 0;
+  transform: translateX(-8px);
+  animation: slideIn 0.3s ease forwards;
+}
+@keyframes slideIn {
+  to { opacity: 1; transform: translateX(0); }
+}
+
+/* Steps */
 .ai-steps { display: flex; flex-direction: column; gap: 10px; }
 .ai-step {
   display: flex;
@@ -370,6 +398,85 @@ body {
   color: #7C3AED;
   border: 1px solid #DDD6FE;
   white-space: nowrap;
+}
+
+/* 俄语关键词特殊展示 */
+.russian-keywords-box {
+  margin-top: 12px;
+  padding: 12px 14px;
+  background: linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%);
+  border-radius: 10px;
+  border: 1px solid #BFDBFE;
+}
+.russian-keywords-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #1E40AF;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.russian-keywords-text {
+  font-size: 13px;
+  color: #1E3A8A;
+  line-height: 1.8;
+  word-break: break-all;
+  font-weight: 500;
+}
+.russian-keyword-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 2px 4px 2px 0;
+  padding: 3px 10px;
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid #93C5FD;
+  font-size: 12px;
+  color: #1D4ED8;
+}
+.russian-keyword-item .meaning {
+  color: #64748B;
+  font-size: 11px;
+  font-weight: 400;
+}
+.copy-btn {
+  margin-top: 8px;
+  padding: 4px 12px;
+  background: #3B82F6;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.copy-btn:hover { background: #2563EB; }
+.copy-btn.copied { background: #10B981; }
+
+/* 英文搜索词展示 */
+.english-keywords-box {
+  margin-top: 10px;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.6);
+  border-radius: 8px;
+}
+.english-keywords-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: #6D28D9;
+  margin-bottom: 6px;
+}
+.english-keyword-tag {
+  display: inline-block;
+  padding: 3px 10px;
+  margin: 2px 4px 2px 0;
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid #DDD6FE;
+  font-size: 12px;
+  color: #7C3AED;
 }
 
 /* Products */
@@ -685,11 +792,11 @@ body {
 
 <!-- Results Section -->
 <div class="results-section" id="results-section">
-  <!-- Analysis Steps Card -->
+  <!-- Analysis Card -->
   <div class="analysis-card">
     <div class="analysis-header">
       <div class="analysis-header-icon">🧠</div>
-      <div>
+      <div class="analysis-header-text">
         <div class="analysis-header-title">AI智能分析 <span class="loading-dots" id="analysis-loading"><span></span><span></span><span></span></span></div>
         <div class="analysis-header-sub" id="analysis-sub">正在启动AI分析引擎...</div>
         <div class="analysis-timing" id="analysis-timing">
@@ -699,6 +806,12 @@ body {
         </div>
       </div>
     </div>
+    
+    <!-- 分析过程文字展示区 -->
+    <div class="analysis-content" id="analysis-content" style="display:none;">
+      <div id="analysis-lines"></div>
+    </div>
+    
     <div class="ai-steps" id="ai-steps">
       <!-- Steps will be added dynamically -->
     </div>
@@ -749,7 +862,6 @@ async function initMCP() {
   if (mcpInitialized) return;
   
   try {
-    // 1. 发送 initialize 请求
     const initResp = await fetch(MCP_API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -767,13 +879,11 @@ async function initMCP() {
     
     if (!initResp.ok) {
       console.warn('MCP init HTTP error:', initResp.status);
-      // 继续尝试，有些MCP服务可能不需要初始化
     } else {
       const initData = await initResp.json().catch(() => ({}));
       console.log('[MCP] initialize response:', initData);
     }
     
-    // 2. 发送 notifications/initialized 通知
     await fetch(MCP_API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -787,7 +897,6 @@ async function initMCP() {
     console.log('[MCP] initialized successfully');
   } catch(e) {
     console.warn('[MCP] init failed, will try direct call:', e.message);
-    // 初始化失败也继续，直接调用tools/call试试
     mcpInitialized = true;
   }
 }
@@ -818,10 +927,8 @@ async function callOzonSearch(req) {
     throw new Error(data.error.message || 'MCP调用错误');
   }
   
-  // 解析 result.content.text 是 JSON 字符串
   let resultText = '';
   if (data.result && data.result.content) {
-    // content 可能是数组或对象
     if (Array.isArray(data.result.content)) {
       const textItem = data.result.content.find(c => c.type === 'text');
       if (textItem) resultText = textItem.text;
@@ -854,7 +961,7 @@ async function callOzonSearch(req) {
   }
 }
 
-// ===== 扣子智能体配置（单个智能体）=====
+// ===== 扣子智能体配置 =====
 const USE_COZE_AGENT = true;
 const COZE_BOT_ID = '7665184702596169782';
 const COZE_API_TOKEN = 'sat_M2oVUcRcmShLQVJuvMdLm7K7DSxC9KvvuZI8Yj9eqt4uSvelfMmeMsYSGqveGK1m';
@@ -1024,7 +1131,6 @@ async function callCozeBot(botId, query, onStreamDelta) {
             
             if (msgType === 'answer') {
               answerStarted = true;
-              // 优先用 content，如果 content 为空则用 reasoning_content（推理模型）
               const textChunk = content || reasoningContent;
               if (textChunk) {
                 answerContent += textChunk;
@@ -1046,7 +1152,6 @@ async function callCozeBot(botId, query, onStreamDelta) {
             const reasoningContent = data.reasoning_content || '';
             addDebugLog(`消息完成, type: ${msgType}, content长度: ${content.length}, reasoning长度: ${reasoningContent.length}`);
             if (msgType === 'answer') {
-              // 优先用 content，如果 content 为空则用 reasoning_content
               const finalText = content || reasoningContent;
               if (finalText) {
                 answerContent = finalText;
@@ -1234,7 +1339,6 @@ async function callZhipuSearchAnalysis(query) {
 
 // ===== 简单规则引擎（最后兜底）=====
 function ruleBasedAnalysis(query) {
-  // 简单的中英关键词映射
   const keywordMap = {
     '连衣裙': 'dress', '裙子': 'dress', '裙': 'dress',
     '女装上装': 'women top', 't恤': 't-shirt', '上衣': 'top',
@@ -1265,7 +1369,9 @@ function ruleBasedAnalysis(query) {
     modifiers: { style: [], material: [], crowd: [], scene: [] },
     expandedKeywords: [englishKeyword],
     excludedKeywords: [],
-    requiredKeywords: []
+    requiredKeywords: [],
+    russianKeywords: [],
+    russianKeywordsExplain: []
   };
 }
 
@@ -1277,21 +1383,18 @@ function processOzonProducts(items, excludedKeywords, requiredKeywords, coreProd
   const core = coreProduct ? coreProduct.toLowerCase() : '';
   
   for (const item of items) {
-    // 修复俄语编码
     const subjectRaw = item.subject || '';
     const subject = fixRussianEncoding(subjectRaw);
     const levelName = fixRussianEncoding(item.levelName || '');
     
     const title = subject.toLowerCase();
     
-    // 排除词过滤
     let skip = false;
     for (const ex of excluded) {
       if (ex.length >= 2 && title.includes(ex)) { skip = true; break; }
     }
     if (skip) continue;
     
-    // 必选词检查
     if (required.length > 0) {
       let matchCount = 0;
       for (const rq of required) {
@@ -1302,15 +1405,12 @@ function processOzonProducts(items, excludedKeywords, requiredKeywords, coreProd
       if (matchCount < threshold) continue;
     }
     
-    // 计算相关性评分
     let relevanceScore = 0;
     if (core && title.includes(core)) relevanceScore += 10;
     
-    // 销量分
     const salesScore = Math.min(2, Math.log10((item.saleQuantity30d || 0) + 1) / 3);
     relevanceScore += salesScore;
     
-    // 评分分
     if (item.score) relevanceScore += Math.min(2, item.score / 2.5);
     
     result.push({
@@ -1334,7 +1434,6 @@ function processOzonProducts(items, excludedKeywords, requiredKeywords, coreProd
     });
   }
   
-  // 排序：先按相关性评分降序，再按销量降序
   result.sort((a, b) => {
     const scoreDiff = (b._relevance || 0) - (a._relevance || 0);
     if (Math.abs(scoreDiff) > 0.01) return scoreDiff;
@@ -1349,16 +1448,12 @@ async function fetchProductsFromAPI(keyword, aiResult) {
   const allProducts = [];
   const seenIds = new Set();
   
-  // 获取类目ID
   let categoryIdList = [];
   if (aiResult && aiResult.categorySuggestion && aiResult.categorySuggestion.categoryId) {
     categoryIdList = [aiResult.categorySuggestion.categoryId];
   }
   
-  // 搜索关键词（英文
   const searchKeyword = (aiResult && aiResult.searchKeyword) || keyword;
-  
-  // 扩展词
   const expandedKeywords = (aiResult && aiResult.expandedKeywords) || [];
   const excludedKeywords = (aiResult && aiResult.excludedKeywords) || [];
   const requiredKeywords = (aiResult && aiResult.requiredKeywords) || [];
@@ -1521,6 +1616,35 @@ function clearSearchHistory() {
 // 页面加载时渲染历史
 renderSearchHistory();
 
+// ===== 分析过程文字展示 =====
+let analysisLineCount = 0;
+function addAnalysisLine(text) {
+  const container = document.getElementById('analysis-content');
+  const linesContainer = document.getElementById('analysis-lines');
+  if (!container || !linesContainer) return;
+  
+  container.style.display = 'block';
+  
+  const lineEl = document.createElement('div');
+  lineEl.className = 'line';
+  lineEl.style.animationDelay = (analysisLineCount * 0.05) + 's';
+  lineEl.textContent = text;
+  linesContainer.appendChild(lineEl);
+  
+  analysisLineCount++;
+  
+  // 自动滚动到底部
+  container.scrollTop = container.scrollHeight;
+}
+
+function clearAnalysisContent() {
+  const linesContainer = document.getElementById('analysis-lines');
+  const container = document.getElementById('analysis-content');
+  if (linesContainer) linesContainer.innerHTML = '';
+  if (container) container.style.display = 'none';
+  analysisLineCount = 0;
+}
+
 // ===== 添加分析步骤 =====
 function addStep(icon, title, detail, tokens) {
   const stepsContainer = document.getElementById('ai-steps');
@@ -1590,6 +1714,87 @@ function updateStep(stepEl, icon, title, detail, tokens) {
     </div>`;
 }
 
+// ===== 生成分析说明文字 =====
+function generateAnalysisText(aiResult, query) {
+  const lines = [];
+  
+  lines.push('📊 正在为您分析 OZON 选品关键词...');
+  lines.push('');
+  
+  const coreProduct = aiResult.coreProduct || query;
+  const searchKeyword = aiResult.searchKeyword || query;
+  lines.push('【核心产品】' + coreProduct);
+  lines.push('【英文搜索词】' + searchKeyword + '（OZON平台搜索主要用英文）');
+  lines.push('');
+  
+  if (aiResult.modifiers) {
+    const mods = [];
+    if (aiResult.modifiers.style && aiResult.modifiers.style.length > 0) {
+      mods.push('风格: ' + aiResult.modifiers.style.join('、'));
+    }
+    if (aiResult.modifiers.material && aiResult.modifiers.material.length > 0) {
+      mods.push('材质: ' + aiResult.modifiers.material.join('、'));
+    }
+    if (aiResult.modifiers.crowd && aiResult.modifiers.crowd.length > 0) {
+      mods.push('人群: ' + aiResult.modifiers.crowd.join('、'));
+    }
+    if (aiResult.modifiers.scene && aiResult.modifiers.scene.length > 0) {
+      mods.push('场景: ' + aiResult.modifiers.scene.join('、'));
+    }
+    if (mods.length > 0) {
+      lines.push('【修饰维度】' + mods.join(' | '));
+    }
+  }
+  
+  lines.push('');
+  
+  if (aiResult.expandedKeywords && aiResult.expandedKeywords.length > 0) {
+    lines.push('【扩展搜索词】共 ' + aiResult.expandedKeywords.length + ' 个:');
+    lines.push('  ' + aiResult.expandedKeywords.join(', '));
+  }
+  
+  lines.push('');
+  
+  if (aiResult.russianKeywords && aiResult.russianKeywords.length > 0) {
+    lines.push('🇷🇺 【俄语关键词】共 ' + aiResult.russianKeywords.length + ' 个（词组匹配时使用）:');
+    lines.push('  ' + aiResult.russianKeywords.join(', '));
+  }
+  
+  lines.push('');
+  
+  if (aiResult.categorySuggestion && aiResult.categorySuggestion.categoryName) {
+    lines.push('【推荐类目】' + aiResult.categorySuggestion.categoryName + 
+      (aiResult.categorySuggestion.categoryId ? ' (ID: ' + aiResult.categorySuggestion.categoryId + ')' : ''));
+  }
+  
+  lines.push('');
+  
+  if (aiResult.excludedKeywords && aiResult.excludedKeywords.length > 0) {
+    lines.push('【排除关键词】' + aiResult.excludedKeywords.join(', '));
+  }
+  
+  if (aiResult.searchTips) {
+    lines.push('');
+    lines.push('💡 【搜索建议】');
+    if (aiResult.searchTips.matchMode) {
+      lines.push('  · 匹配模式: ' + aiResult.searchTips.matchMode);
+    }
+    if (aiResult.searchTips.sortSuggestion) {
+      lines.push('  · 排序建议: ' + aiResult.searchTips.sortSuggestion);
+    }
+    if (aiResult.searchTips.note) {
+      lines.push('  · 注意: ' + aiResult.searchTips.note);
+    }
+  }
+  
+  if (aiResult.analysisSummary) {
+    lines.push('');
+    lines.push('📝 【分析总结】' + aiResult.analysisSummary);
+  }
+  
+  return lines;
+}
+
 // ===== 搜索主函数 =====
 async function doSearch() {
   const query = document.getElementById('search-input').value.trim();
@@ -1620,6 +1825,9 @@ async function doSearch() {
   updateTimingDisplay({ agent: null, api: null, total: null });
   document.getElementById('product-grid').innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px;color:#999;">正在搜索商品...</div>';
   
+  // 清空分析内容
+  clearAnalysisContent();
+  
   resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
   // ===== AI智能体分析 =====
@@ -1633,6 +1841,7 @@ async function doSearch() {
   let analysisProcessText = '';
   
   const cozeData = await callCozeSearchAnalysis(query, (delta, fullText) => {
+    // 提取 JSON 之前的分析过程文字
     const jsonStartIndex = fullText.indexOf('{');
     let processText = fullText;
     if (jsonStartIndex > 0) {
@@ -1697,6 +1906,14 @@ async function doSearch() {
     total: performance.now() - totalStartTime 
   });
 
+  // ===== 生成分析说明文字并展示 =====
+  const analysisLines = generateAnalysisText(aiResult, query);
+  analysisLines.forEach((line, index) => {
+    setTimeout(() => {
+      addAnalysisLine(line);
+    }, index * 30);
+  });
+
   // ===== Step 1: 搜索关键词提取（替换流式步骤）=====
   const searchKeyword = aiResult.searchKeyword || query;
   const coreProduct = aiResult.coreProduct || query;
@@ -1721,6 +1938,7 @@ async function doSearch() {
   const expanded = aiResult.expandedKeywords || [];
   const excluded = aiResult.excludedKeywords || [];
   const russianKeywords = aiResult.russianKeywords || [];
+  const russianKeywordsExplain = aiResult.russianKeywordsExplain || [];
   
   let step2Detail = '';
   let step2Tokens = [];
@@ -1743,16 +1961,48 @@ async function doSearch() {
   // 显示俄语关键词（如果有）
   if (russianKeywords.length > 0) {
     const russianEl = document.createElement('div');
-    russianEl.style.cssText = 'margin-top:10px;padding:10px 12px;background:#F0F9FF;border-radius:8px;';
+    russianEl.className = 'russian-keywords-box';
+    
+    let keywordsHtml = '';
+    if (russianKeywordsExplain && russianKeywordsExplain.length > 0) {
+      keywordsHtml = russianKeywordsExplain.map(item => 
+        '<span class="russian-keyword-item">' + 
+          escapeHtml(item.keyword || item) + 
+          (item.meaning ? ' <span class="meaning">(' + escapeHtml(item.meaning) + ')</span>' : '') +
+        '</span>'
+      ).join('');
+    } else {
+      keywordsHtml = russianKeywords.map(kw => 
+        '<span class="russian-keyword-item">' + escapeHtml(kw) + '</span>'
+      ).join('');
+    }
+    
     const russianText = russianKeywords.join(', ');
+    
     russianEl.innerHTML = 
-      '<div style="font-size:12px;color:#0369A1;margin-bottom:6px;font-weight:500;">🇷🇺 俄语关键词组合（词组匹配用）：</div>' +
-      '<div style="font-size:12px;color:#1E293B;line-height:1.8;word-break:break-all;">' + escapeHtml(russianText) + '</div>' +
-      '<button onclick="navigator.clipboard.writeText(\'' + escapeHtml(russianText).replace(/'/g, "\\'") + '\');this.textContent=\'已复制✓\';setTimeout(()=>{this.textContent=\'复制\'},2000)" style="margin-top:8px;padding:4px 12px;background:#0EA5E9;color:#fff;border:none;border-radius:6px;font-size:11px;cursor:pointer;">复制</button>';
+      '<div class="russian-keywords-title">🇷🇺 俄语关键词组合（词组匹配用）</div>' +
+      '<div class="russian-keywords-text">' + keywordsHtml + '</div>' +
+      '<button class="copy-btn" onclick="navigator.clipboard.writeText(\'' + escapeHtml(russianText).replace(/'/g, "\\'") + '\');this.textContent=\'已复制✓\';this.classList.add(\'copied\');setTimeout(()=>{this.textContent=\'复制\';this.classList.remove(\'copied\')},2000)">复制全部</button>';
+    
     const lastStep = document.getElementById('ai-steps').lastElementChild;
     if (lastStep) {
       const contentEl = lastStep.querySelector('.ai-step-content');
       if (contentEl) contentEl.appendChild(russianEl);
+    }
+  }
+  
+  // 显示英文扩展词
+  if (expanded.length > 0) {
+    const englishEl = document.createElement('div');
+    englishEl.className = 'english-keywords-box';
+    englishEl.innerHTML = 
+      '<div class="english-keywords-title">🔤 英文搜索词（API搜索用）</div>' +
+      expanded.map(kw => '<span class="english-keyword-tag">' + escapeHtml(kw) + '</span>').join('');
+    
+    const lastStep = document.getElementById('ai-steps').lastElementChild;
+    if (lastStep) {
+      const contentEl = lastStep.querySelector('.ai-step-content');
+      if (contentEl) contentEl.appendChild(englishEl);
     }
   }
   
@@ -1843,7 +2093,6 @@ function renderProducts(products, page) {
     return;
   }
   
-  // 分页计算
   const totalPages = Math.ceil(total / PAGE_SIZE);
   if (!page) page = 1;
   if (page < 1) page = 1;
@@ -1869,7 +2118,6 @@ function renderProducts(products, page) {
       imgHtml = '<div class="product-img-placeholder">📦</div>';
     }
     
-    // 卖家类型和配送模式标签
     let badges = '';
     if (p.companyType === 1) {
       badges += '<span class="product-badge badge-cross">跨境</span>';
@@ -1884,14 +2132,11 @@ function renderProducts(products, page) {
         badges += '<span class="product-badge badge-fbs">FBS</span>';
       }
     }
-    // 热销标签
     if ((p.sales || 0) > 1000) badges += '<span class="product-badge badge-hot">热销</span>';
     
-    // 价格显示：卢布 + 人民币
     const priceRub = p.price ? Number(p.price).toLocaleString() : '0';
     const priceRmb = p.priceRmb ? '¥' + Number(p.priceRmb).toFixed(0) : '';
     
-    // 30天销售额
     const saleVol = p.saleVolume30d ? Number(p.saleVolume30d).toLocaleString() + ' ₽' : '--';
     
     card.innerHTML = `
@@ -1912,7 +2157,6 @@ function renderProducts(products, page) {
     grid.appendChild(card);
   });
   
-  // 渲染分页
   renderPagination(total, totalPages, page);
   
   grid.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -2036,27 +2280,22 @@ document.getElementById('sort-filter').addEventListener('click', function(e) {
   let sorted = [...currentResults];
   
   if (sort === 'score') {
-    // 综合相关：按相关性评分降序，再按销量降序
     sorted.sort((a, b) => {
       const scoreDiff = (b._relevance || 0) - (a._relevance || 0);
       if (Math.abs(scoreDiff) > 0.01) return scoreDiff;
       return (b.sales || 0) - (a.sales || 0);
     });
   } else if (sort === 'sales') {
-    // 30天销量
     sorted.sort((a, b) => (b.sales || 0) - (a.sales || 0));
   } else if (sort === 'revenue') {
-    // 30天销售额
     sorted.sort((a, b) => (b.saleVolume30d || 0) - (a.saleVolume30d || 0));
   } else if (sort === 'growth') {
-    // 30天增长率
     sorted.sort((a, b) => (b.saleVolume30dRate || 0) - (a.saleVolume30dRate || 0));
   } else if (sort === 'price-low') {
     sorted.sort((a, b) => (a.price || 0) - (b.price || 0));
   } else if (sort === 'price-high') {
     sorted.sort((a, b) => (b.price || 0) - (a.price || 0));
   } else if (sort === 'rating') {
-    // 评分
     sorted.sort((a, b) => (b.score || 0) - (a.score || 0));
   }
   
