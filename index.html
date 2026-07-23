@@ -1156,12 +1156,16 @@ async function callCozeSearchAnalysis(query, onStreamDelta) {
   
   const agentStart = performance.now();
   
-  const result = await callCozeBot(COZE_BOT_ID, query, onStreamDelta);
-  const agentTime = performance.now() - agentStart;
-  
-  addDebugLog('智能体完成，耗时: ' + formatDuration(agentTime));
-  
-  return { result, agentTime };
+  try {
+    const result = await callCozeBot(COZE_BOT_ID, query, onStreamDelta);
+    const agentTime = performance.now() - agentStart;
+    addDebugLog('智能体完成，耗时: ' + formatDuration(agentTime));
+    return { result, agentTime };
+  } catch (e) {
+    addDebugLog('智能体调用失败: ' + e.message);
+    console.warn('[Coze] 智能体调用失败:', e.message);
+    return { result: null, agentTime: performance.now() - agentStart };
+  }
 }
 
 // ===== 调用智谱AI（备用）=====
@@ -1574,6 +1578,8 @@ async function doSearch() {
   const btn = document.getElementById('search-btn');
   btn.disabled = true;
 
+  try {
+
   // 保存搜索历史
   saveSearchHistory(query);
 
@@ -1770,8 +1776,14 @@ async function doSearch() {
   currentResults = products;
   renderProducts(products);
   
-  isSearching = false;
-  btn.disabled = false;
+  } catch (e) {
+    console.error('[搜索出错]', e);
+    document.getElementById('product-grid').innerHTML = 
+      '<div style="grid-column:1/-1;text-align:center;padding:60px;color:#999;">搜索出错: ' + escapeHtml(e.message) + '<br><br>请稍后重试或尝试其他关键词</div>';
+  } finally {
+    isSearching = false;
+    btn.disabled = false;
+  }
 }
 
 // ===== 渲染商品 =====
