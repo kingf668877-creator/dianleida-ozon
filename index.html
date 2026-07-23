@@ -1010,12 +1010,17 @@ async function callCozeBot(botId, query, onStreamDelta) {
           if (eventType === 'conversation.message.delta') {
             const msgType = data.type || '';
             const content = data.content || '';
+            const reasoningContent = data.reasoning_content || '';
             
             if (msgType === 'answer') {
               answerStarted = true;
-              answerContent += content;
-              if (onStreamDelta) {
-                onStreamDelta(content, answerContent);
+              // 优先用 content，如果 content 为空则用 reasoning_content（推理模型）
+              const textChunk = content || reasoningContent;
+              if (textChunk) {
+                answerContent += textChunk;
+                if (onStreamDelta) {
+                  onStreamDelta(textChunk, answerContent);
+                }
               }
             } else if (!answerStarted && msgType === '' && content) {
               if (content.trim().startsWith('{') || answerContent.length > 0) {
@@ -1027,9 +1032,15 @@ async function callCozeBot(botId, query, onStreamDelta) {
             }
           } else if (eventType === 'conversation.message.completed') {
             const msgType = data.type || '';
-            addDebugLog(`消息完成, type: ${msgType}, content长度: ${(data.content || '').length}`);
-            if (msgType === 'answer' && data.content) {
-              answerContent = data.content;
+            const content = data.content || '';
+            const reasoningContent = data.reasoning_content || '';
+            addDebugLog(`消息完成, type: ${msgType}, content长度: ${content.length}, reasoning长度: ${reasoningContent.length}`);
+            if (msgType === 'answer') {
+              // 优先用 content，如果 content 为空则用 reasoning_content
+              const finalText = content || reasoningContent;
+              if (finalText) {
+                answerContent = finalText;
+              }
             }
           } else if (eventType === 'conversation.chat.failed') {
             hasError = true;
