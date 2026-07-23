@@ -958,10 +958,10 @@ async function callCozeBot(botId, query, onStreamDelta) {
       ]
     });
     
-    addDebugLog('发起流式对话请求（超时60秒）...');
+    addDebugLog('发起流式对话请求（超时15秒）...');
     
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 60000);
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
     
     const response = await fetch(COZE_API_URL, {
       method: 'POST',
@@ -988,7 +988,7 @@ async function callCozeBot(botId, query, onStreamDelta) {
       let answerStarted = false;
       
       const sseTimeoutId = setTimeout(() => {
-        addDebugLog('SSE解析超时90秒，强制结束');
+        addDebugLog('SSE解析超时20秒，强制结束');
         if (answerContent && answerContent.length > 10) {
           try {
             const json = extractJSON(answerContent);
@@ -999,8 +999,8 @@ async function callCozeBot(botId, query, onStreamDelta) {
             }
           } catch(e) {}
         }
-        reject(new Error('智能体分析超时（90秒），请重试'));
-      }, 90000);
+        reject(new Error('智能体分析超时（20秒），请重试'));
+      }, 20000);
       
       parseSSE(
         response,
