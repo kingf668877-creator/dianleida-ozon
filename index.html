@@ -837,6 +837,16 @@ async function callOzonSearch(req) {
   
   try {
     const parsed = JSON.parse(resultText);
+    // 兼容不同的数据结构：可能是 {list: [...]} 或 {result: {list: [...]}}
+    if (parsed && parsed.result && parsed.result.list && Array.isArray(parsed.result.list)) {
+      return {
+        list: parsed.result.list,
+        totalCount: parsed.result.totalCount || 0,
+        totalPages: parsed.result.totalPages || 0,
+        pageIndex: parsed.result.pageIndex || 1,
+        pageSize: parsed.result.pageSize || 0
+      };
+    }
     return parsed;
   } catch(e) {
     console.error('[MCP] Failed to parse result text:', e.message);
@@ -958,10 +968,10 @@ async function callCozeBot(botId, query, onStreamDelta) {
       ]
     });
     
-    addDebugLog('发起流式对话请求（超时15秒）...');
+    addDebugLog('发起流式对话请求（超时60秒）...');
     
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    const timeoutId = setTimeout(() => controller.abort(), 60000);
     
     const response = await fetch(COZE_API_URL, {
       method: 'POST',
@@ -988,7 +998,7 @@ async function callCozeBot(botId, query, onStreamDelta) {
       let answerStarted = false;
       
       const sseTimeoutId = setTimeout(() => {
-        addDebugLog('SSE解析超时20秒，强制结束');
+        addDebugLog('SSE解析超时60秒，强制结束');
         if (answerContent && answerContent.length > 10) {
           try {
             const json = extractJSON(answerContent);
@@ -999,8 +1009,8 @@ async function callCozeBot(botId, query, onStreamDelta) {
             }
           } catch(e) {}
         }
-        reject(new Error('智能体分析超时（20秒），请重试'));
-      }, 20000);
+        reject(new Error('智能体分析超时（60秒），请重试'));
+      }, 60000);
       
       parseSSE(
         response,
