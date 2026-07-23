@@ -1005,7 +1005,7 @@ async function callCozeBot(botId, query, onStreamDelta) {
       parseSSE(
         response,
         (eventType, data) => {
-          addDebugLog(`事件: ${eventType}, type: ${data.type || 'unknown'}`);
+          addDebugLog(`收到事件: ${eventType}, data.type: ${data.type || 'N/A'}, content长度: ${(data.content || '').length}`);
           
           if (eventType === 'conversation.message.delta') {
             const msgType = data.type || '';
@@ -1027,7 +1027,10 @@ async function callCozeBot(botId, query, onStreamDelta) {
             }
           } else if (eventType === 'conversation.message.completed') {
             const msgType = data.type || '';
-            addDebugLog(`消息完成, type: ${msgType}`);
+            addDebugLog(`消息完成, type: ${msgType}, content长度: ${(data.content || '').length}`);
+            if (msgType === 'answer' && data.content) {
+              answerContent = data.content;
+            }
           } else if (eventType === 'conversation.chat.failed') {
             hasError = true;
             const lastError = data.last_error || {};
@@ -1696,21 +1699,41 @@ async function doSearch() {
   await new Promise(r => setTimeout(r, 300));
   const expanded = aiResult.expandedKeywords || [];
   const excluded = aiResult.excludedKeywords || [];
+  const russianKeywords = aiResult.russianKeywords || [];
   
   let step2Detail = '';
   let step2Tokens = [];
   
   if (expanded.length > 0) {
-    step2Detail += '智能扩展 ' + expanded.length + ' 个搜索变体';
-    step2Tokens = expanded.slice(0, 8);
+    step2Detail += '英文扩展 ' + expanded.length + ' 个';
+    step2Tokens = expanded.slice(0, 6);
   } else {
     step2Detail += '无需额外扩展';
   }
+  if (russianKeywords.length > 0) {
+    step2Detail += ' · 俄语关键词 ' + russianKeywords.length + ' 个';
+  }
   if (excluded.length > 0) {
-    step2Detail += ' · 排除 ' + excluded.length + ' 个不相关词';
+    step2Detail += ' · 排除 ' + excluded.length + ' 个';
   }
   
-  addStep('🔗', 'Step 2: 关键词扩展与排除', step2Detail, step2Tokens);
+  addStep('🔗', 'Step 2: 关键词扩展', step2Detail, step2Tokens);
+  
+  // 显示俄语关键词（如果有）
+  if (russianKeywords.length > 0) {
+    const russianEl = document.createElement('div');
+    russianEl.style.cssText = 'margin-top:10px;padding:10px 12px;background:#F0F9FF;border-radius:8px;';
+    const russianText = russianKeywords.join(', ');
+    russianEl.innerHTML = 
+      '<div style="font-size:12px;color:#0369A1;margin-bottom:6px;font-weight:500;">🇷🇺 俄语关键词组合（词组匹配用）：</div>' +
+      '<div style="font-size:12px;color:#1E293B;line-height:1.8;word-break:break-all;">' + escapeHtml(russianText) + '</div>' +
+      '<button onclick="navigator.clipboard.writeText(\'' + escapeHtml(russianText).replace(/'/g, "\\'") + '\');this.textContent=\'已复制✓\';setTimeout(()=>{this.textContent=\'复制\'},2000)" style="margin-top:8px;padding:4px 12px;background:#0EA5E9;color:#fff;border:none;border-radius:6px;font-size:11px;cursor:pointer;">复制</button>';
+    const lastStep = document.getElementById('ai-steps').lastElementChild;
+    if (lastStep) {
+      const contentEl = lastStep.querySelector('.ai-step-content');
+      if (contentEl) contentEl.appendChild(russianEl);
+    }
+  }
   
   if (excluded.length > 0) {
     const excludedEl = document.createElement('div');
