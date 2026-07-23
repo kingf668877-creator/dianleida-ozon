@@ -321,29 +321,36 @@ body {
 }
 .timing-chip strong { font-weight: 700; color: #4C1D95; }
 
-/* 分析过程文字区域 */
-.analysis-content {
-  background: rgba(255, 255, 255, 0.7);
-  border-radius: 12px;
-  padding: 16px 18px;
-  margin-bottom: 16px;
-  font-size: 13px;
+/* Step 2 渐变分析过程展示 */
+.step-analysis-box {
+  margin-top: 12px;
+  padding: 14px 16px;
+  background: linear-gradient(135deg, rgba(255,255,255,0.9) 0%, rgba(245,243,255,0.9) 100%);
+  border-radius: 10px;
+  border: 1px solid rgba(124, 58, 237, 0.12);
+}
+.step-analysis-row {
+  margin-bottom: 10px;
+  font-size: 12px;
   line-height: 1.7;
-  color: #5B21B6;
-  max-height: 200px;
-  overflow-y: auto;
-  border: 1px solid rgba(124, 58, 237, 0.08);
-}
-.analysis-content::-webkit-scrollbar { width: 6px; }
-.analysis-content::-webkit-scrollbar-track { background: transparent; }
-.analysis-content::-webkit-scrollbar-thumb { background: #C4B5FD; border-radius: 3px; }
-
-.analysis-content .line {
+  color: #6D28D9;
   opacity: 0;
-  transform: translateX(-8px);
-  animation: slideIn 0.3s ease forwards;
+  transform: translateX(-6px);
+  animation: fadeSlideIn 0.4s ease forwards;
 }
-@keyframes slideIn {
+.step-analysis-row:last-child {
+  margin-bottom: 0;
+}
+.step-analysis-row .label {
+  font-weight: 600;
+  color: #4C1D95;
+  margin-right: 6px;
+}
+.step-analysis-row .keywords {
+  color: #7C3AED;
+  word-break: break-all;
+}
+@keyframes fadeSlideIn {
   to { opacity: 1; transform: translateX(0); }
 }
 
@@ -805,11 +812,6 @@ body {
           <span class="timing-chip">总耗时：<strong id="timing-total">--</strong></span>
         </div>
       </div>
-    </div>
-    
-    <!-- 分析过程文字展示区 -->
-    <div class="analysis-content" id="analysis-content" style="display:none;">
-      <div id="analysis-lines"></div>
     </div>
     
     <div class="ai-steps" id="ai-steps">
@@ -1616,35 +1618,6 @@ function clearSearchHistory() {
 // 页面加载时渲染历史
 renderSearchHistory();
 
-// ===== 分析过程文字展示 =====
-let analysisLineCount = 0;
-function addAnalysisLine(text) {
-  const container = document.getElementById('analysis-content');
-  const linesContainer = document.getElementById('analysis-lines');
-  if (!container || !linesContainer) return;
-  
-  container.style.display = 'block';
-  
-  const lineEl = document.createElement('div');
-  lineEl.className = 'line';
-  lineEl.style.animationDelay = (analysisLineCount * 0.05) + 's';
-  lineEl.textContent = text;
-  linesContainer.appendChild(lineEl);
-  
-  analysisLineCount++;
-  
-  // 自动滚动到底部
-  container.scrollTop = container.scrollHeight;
-}
-
-function clearAnalysisContent() {
-  const linesContainer = document.getElementById('analysis-lines');
-  const container = document.getElementById('analysis-content');
-  if (linesContainer) linesContainer.innerHTML = '';
-  if (container) container.style.display = 'none';
-  analysisLineCount = 0;
-}
-
 // ===== 添加分析步骤 =====
 function addStep(icon, title, detail, tokens) {
   const stepsContainer = document.getElementById('ai-steps');
@@ -1714,87 +1687,6 @@ function updateStep(stepEl, icon, title, detail, tokens) {
     </div>`;
 }
 
-// ===== 生成分析说明文字 =====
-function generateAnalysisText(aiResult, query) {
-  const lines = [];
-  
-  lines.push('📊 正在为您分析 OZON 选品关键词...');
-  lines.push('');
-  
-  const coreProduct = aiResult.coreProduct || query;
-  const searchKeyword = aiResult.searchKeyword || query;
-  lines.push('【核心产品】' + coreProduct);
-  lines.push('【英文搜索词】' + searchKeyword + '（OZON平台搜索主要用英文）');
-  lines.push('');
-  
-  if (aiResult.modifiers) {
-    const mods = [];
-    if (aiResult.modifiers.style && aiResult.modifiers.style.length > 0) {
-      mods.push('风格: ' + aiResult.modifiers.style.join('、'));
-    }
-    if (aiResult.modifiers.material && aiResult.modifiers.material.length > 0) {
-      mods.push('材质: ' + aiResult.modifiers.material.join('、'));
-    }
-    if (aiResult.modifiers.crowd && aiResult.modifiers.crowd.length > 0) {
-      mods.push('人群: ' + aiResult.modifiers.crowd.join('、'));
-    }
-    if (aiResult.modifiers.scene && aiResult.modifiers.scene.length > 0) {
-      mods.push('场景: ' + aiResult.modifiers.scene.join('、'));
-    }
-    if (mods.length > 0) {
-      lines.push('【修饰维度】' + mods.join(' | '));
-    }
-  }
-  
-  lines.push('');
-  
-  if (aiResult.expandedKeywords && aiResult.expandedKeywords.length > 0) {
-    lines.push('【扩展搜索词】共 ' + aiResult.expandedKeywords.length + ' 个:');
-    lines.push('  ' + aiResult.expandedKeywords.join(', '));
-  }
-  
-  lines.push('');
-  
-  if (aiResult.russianKeywords && aiResult.russianKeywords.length > 0) {
-    lines.push('🇷🇺 【俄语关键词】共 ' + aiResult.russianKeywords.length + ' 个（词组匹配时使用）:');
-    lines.push('  ' + aiResult.russianKeywords.join(', '));
-  }
-  
-  lines.push('');
-  
-  if (aiResult.categorySuggestion && aiResult.categorySuggestion.categoryName) {
-    lines.push('【推荐类目】' + aiResult.categorySuggestion.categoryName + 
-      (aiResult.categorySuggestion.categoryId ? ' (ID: ' + aiResult.categorySuggestion.categoryId + ')' : ''));
-  }
-  
-  lines.push('');
-  
-  if (aiResult.excludedKeywords && aiResult.excludedKeywords.length > 0) {
-    lines.push('【排除关键词】' + aiResult.excludedKeywords.join(', '));
-  }
-  
-  if (aiResult.searchTips) {
-    lines.push('');
-    lines.push('💡 【搜索建议】');
-    if (aiResult.searchTips.matchMode) {
-      lines.push('  · 匹配模式: ' + aiResult.searchTips.matchMode);
-    }
-    if (aiResult.searchTips.sortSuggestion) {
-      lines.push('  · 排序建议: ' + aiResult.searchTips.sortSuggestion);
-    }
-    if (aiResult.searchTips.note) {
-      lines.push('  · 注意: ' + aiResult.searchTips.note);
-    }
-  }
-  
-  if (aiResult.analysisSummary) {
-    lines.push('');
-    lines.push('📝 【分析总结】' + aiResult.analysisSummary);
-  }
-  
-  return lines;
-}
-
 // ===== 搜索主函数 =====
 async function doSearch() {
   const query = document.getElementById('search-input').value.trim();
@@ -1824,9 +1716,6 @@ async function doSearch() {
   if (timingEl) timingEl.classList.remove('show');
   updateTimingDisplay({ agent: null, api: null, total: null });
   document.getElementById('product-grid').innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px;color:#999;">正在搜索商品...</div>';
-  
-  // 清空分析内容
-  clearAnalysisContent();
   
   resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
@@ -1906,14 +1795,6 @@ async function doSearch() {
     total: performance.now() - totalStartTime 
   });
 
-  // ===== 生成分析说明文字并展示 =====
-  const analysisLines = generateAnalysisText(aiResult, query);
-  analysisLines.forEach((line, index) => {
-    setTimeout(() => {
-      addAnalysisLine(line);
-    }, index * 30);
-  });
-
   // ===== Step 1: 搜索关键词提取（替换流式步骤）=====
   const searchKeyword = aiResult.searchKeyword || query;
   const coreProduct = aiResult.coreProduct || query;
@@ -1933,32 +1814,93 @@ async function doSearch() {
   
   updateStep(step1Live, '🎯', 'Step 1: 需求分析与关键词提取', step1Detail, tokens);
 
-  // ===== Step 2: 关键词扩展与排除 =====
+  // ===== Step 2: 关键词扩展分析（渐变流式展示）=====
   await new Promise(r => setTimeout(r, 300));
   const expanded = aiResult.expandedKeywords || [];
   const excluded = aiResult.excludedKeywords || [];
   const russianKeywords = aiResult.russianKeywords || [];
   const russianKeywordsExplain = aiResult.russianKeywordsExplain || [];
+  const modifiers = aiResult.modifiers || {};
   
-  let step2Detail = '';
-  let step2Tokens = [];
+  // 构建候选词列表（修饰词 + 扩展词）
+  const candidateKeywords = [];
+  if (modifiers.style) candidateKeywords.push(...modifiers.style);
+  if (modifiers.material) candidateKeywords.push(...modifiers.material);
+  if (modifiers.scene) candidateKeywords.push(...modifiers.scene);
+  if (expanded.length > 0) candidateKeywords.push(...expanded.slice(0, 6));
   
-  if (expanded.length > 0) {
-    step2Detail += '英文扩展 ' + expanded.length + ' 个';
-    step2Tokens = expanded.slice(0, 6);
-  } else {
-    step2Detail += '无需额外扩展';
+  // 选择的搜索词（主关键词 + 扩展词前3个）
+  const selectedKeywords = [searchKeyword];
+  if (expanded.length > 0) selectedKeywords.push(...expanded.slice(0, 3));
+  
+  let step2Detail = '候选 ' + candidateKeywords.length + ' 个 · 选择 ' + selectedKeywords.length + ' 个搜索词';
+  if (russianKeywords.length > 0) step2Detail += ' · 俄语 ' + russianKeywords.length + ' 个';
+  if (excluded.length > 0) step2Detail += ' · 排除 ' + excluded.length + ' 个';
+  
+  addStep('🔗', 'Step 2: 搜索词分析扩展', step2Detail, null);
+  
+  // 添加渐变分析过程展示框
+  const lastStep = document.getElementById('ai-steps').lastElementChild;
+  if (lastStep) {
+    const contentEl = lastStep.querySelector('.ai-step-content');
+    if (contentEl) {
+      const analysisBox = document.createElement('div');
+      analysisBox.className = 'step-analysis-box';
+      
+      // 逐行添加分析内容，带渐入动画
+      const analysisRows = [];
+      
+      // 1. 候选词
+      if (candidateKeywords.length > 0) {
+        analysisRows.push({
+          label: '候选：',
+          content: candidateKeywords.slice(0, 12).join('、') + (candidateKeywords.length > 12 ? ' 等' : '')
+        });
+      }
+      
+      // 2. 选择的搜索词
+      analysisRows.push({
+        label: '选择：',
+        content: selectedKeywords.join('、')
+      });
+      
+      // 3. 俄语关键词
+      if (russianKeywords.length > 0) {
+        analysisRows.push({
+          label: '俄语：',
+          content: russianKeywords.slice(0, 8).join('、') + (russianKeywords.length > 8 ? ' 等' : '')
+        });
+      }
+      
+      // 4. 排除词
+      if (excluded.length > 0) {
+        analysisRows.push({
+          label: '排除：',
+          content: excluded.join('、')
+        });
+      }
+      
+      // 5. 原则/说明
+      analysisRows.push({
+        label: '原则：',
+        content: '英文词用于API搜索，俄语词用于词组匹配，排除词过滤不相关商品'
+      });
+      
+      analysisRows.forEach((row, index) => {
+        const rowEl = document.createElement('div');
+        rowEl.className = 'step-analysis-row';
+        rowEl.style.animationDelay = (index * 0.15) + 's';
+        rowEl.innerHTML = 
+          '<span class="label">' + escapeHtml(row.label) + '</span>' +
+          '<span class="keywords">' + escapeHtml(row.content) + '</span>';
+        analysisBox.appendChild(rowEl);
+      });
+      
+      contentEl.appendChild(analysisBox);
+    }
   }
-  if (russianKeywords.length > 0) {
-    step2Detail += ' · 俄语关键词 ' + russianKeywords.length + ' 个';
-  }
-  if (excluded.length > 0) {
-    step2Detail += ' · 排除 ' + excluded.length + ' 个';
-  }
   
-  addStep('🔗', 'Step 2: 关键词扩展', step2Detail, step2Tokens);
-  
-  // 显示俄语关键词（如果有）
+  // 俄语关键词详情框（如果有）
   if (russianKeywords.length > 0) {
     const russianEl = document.createElement('div');
     russianEl.className = 'russian-keywords-box';
@@ -1984,14 +1926,14 @@ async function doSearch() {
       '<div class="russian-keywords-text">' + keywordsHtml + '</div>' +
       '<button class="copy-btn" onclick="navigator.clipboard.writeText(\'' + escapeHtml(russianText).replace(/'/g, "\\'") + '\');this.textContent=\'已复制✓\';this.classList.add(\'copied\');setTimeout(()=>{this.textContent=\'复制\';this.classList.remove(\'copied\')},2000)">复制全部</button>';
     
-    const lastStep = document.getElementById('ai-steps').lastElementChild;
-    if (lastStep) {
-      const contentEl = lastStep.querySelector('.ai-step-content');
-      if (contentEl) contentEl.appendChild(russianEl);
+    const lastStep2 = document.getElementById('ai-steps').lastElementChild;
+    if (lastStep2) {
+      const contentEl2 = lastStep2.querySelector('.ai-step-content');
+      if (contentEl2) contentEl2.appendChild(russianEl);
     }
   }
   
-  // 显示英文扩展词
+  // 英文搜索词标签
   if (expanded.length > 0) {
     const englishEl = document.createElement('div');
     englishEl.className = 'english-keywords-box';
@@ -1999,10 +1941,10 @@ async function doSearch() {
       '<div class="english-keywords-title">🔤 英文搜索词（API搜索用）</div>' +
       expanded.map(kw => '<span class="english-keyword-tag">' + escapeHtml(kw) + '</span>').join('');
     
-    const lastStep = document.getElementById('ai-steps').lastElementChild;
-    if (lastStep) {
-      const contentEl = lastStep.querySelector('.ai-step-content');
-      if (contentEl) contentEl.appendChild(englishEl);
+    const lastStep3 = document.getElementById('ai-steps').lastElementChild;
+    if (lastStep3) {
+      const contentEl3 = lastStep3.querySelector('.ai-step-content');
+      if (contentEl3) contentEl3.appendChild(englishEl);
     }
   }
   
@@ -2011,10 +1953,10 @@ async function doSearch() {
     excludedEl.style.cssText = 'margin-top:8px;font-size:12px;color:#9CA3AF;';
     excludedEl.innerHTML = '<span style="color:#9CA3AF;">排除词：</span>' + 
       excluded.slice(0, 6).map(k => '<span style="display:inline-block;padding:2px 8px;margin:2px;background:#FEF2F2;color:#EF4444;border-radius:10px;font-size:11px;">' + escapeHtml(k) + '</span>').join('');
-    const lastStep = document.getElementById('ai-steps').lastElementChild;
-    if (lastStep) {
-      const contentEl = lastStep.querySelector('.ai-step-content');
-      if (contentEl) contentEl.appendChild(excludedEl);
+    const lastStep4 = document.getElementById('ai-steps').lastElementChild;
+    if (lastStep4) {
+      const contentEl4 = lastStep4.querySelector('.ai-step-content');
+      if (contentEl4) contentEl4.appendChild(excludedEl);
     }
   }
 
