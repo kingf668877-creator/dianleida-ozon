@@ -405,6 +405,18 @@ body {
   color: #7C3AED;
   border: 1px solid #DDD6FE;
   white-space: nowrap;
+  opacity: 0;
+  transform: translateY(4px);
+  animation: fadeSlideUp 0.4s ease forwards;
+}
+.ai-token.main-token {
+  background: linear-gradient(135deg, #7C3AED 0%, #6D28D9 100%);
+  color: #fff;
+  border-color: #6D28D9;
+  font-weight: 600;
+}
+@keyframes fadeSlideUp {
+  to { opacity: 1; transform: translateY(0); }
 }
 
 /* 俄语关键词特殊展示 */
@@ -1724,41 +1736,21 @@ async function doSearch() {
   let aiSource = 'none';
   
   // Step 1: 智能体分析流式步骤
-  const step1Live = addLoadingStep('🎯', 'Step 1: 需求分析中...', '正在分析...');
+  const step1Live = addLoadingStep('🎯', 'Step 1: 需求分析中...', 'AI正在解析您的搜索需求...');
   const step1LiveDetail = step1Live.querySelector('.ai-step-detail');
   const analysisSubEl = document.getElementById('analysis-sub');
-  let analysisProcessText = '';
   
   const cozeData = await callCozeSearchAnalysis(query, (delta, fullText) => {
-    // 提取 JSON 之前的分析过程文字
-    const jsonStartIndex = fullText.indexOf('{');
-    let processText = fullText;
-    if (jsonStartIndex > 0) {
-      processText = fullText.substring(0, jsonStartIndex);
-    }
-    
-    let cleanText = processText
-      .replace(/^##\s*/gm, '')
-      .replace(/^###\s*/gm, '')
-      .replace(/^>\s*/gm, '')
-      .replace(/\n{3,}/g, '\n\n')
-      .trim();
-    
-    const lines = cleanText.split('\n').filter(l => l.trim());
-    const lastLine = lines.length > 0 ? lines[lines.length - 1].trim() : '正在分析...';
-    
+    // 顶部副标题只显示简洁状态
     if (analysisSubEl) {
-      analysisSubEl.textContent = lastLine;
+      analysisSubEl.textContent = 'AI智能体分析中，请稍候...';
     }
     
+    // Step 1 流式过程中只显示简洁的进度提示，不显示大段分析文字
     if (step1LiveDetail) {
-      const recentLines = lines.slice(-4);
-      step1LiveDetail.innerHTML = recentLines.map(l => 
-        '<div style="opacity:' + (recentLines.indexOf(l) === recentLines.length - 1 ? '1' : '0.6') + '; font-size:12px; line-height:1.6;">' + l + '</div>'
-      ).join('');
+      const progressDots = '.'.repeat((Math.floor(performance.now() / 500) % 3) + 1);
+      step1LiveDetail.innerHTML = '<div style="font-size:13px; color:#6B7280;">正在提取核心关键词和修饰维度' + progressDots + '</div>';
     }
-    
-    analysisProcessText = cleanText;
     
     updateTimingDisplay({ 
       agent: agentDuration, 
@@ -1795,24 +1787,80 @@ async function doSearch() {
     total: performance.now() - totalStartTime 
   });
 
-  // ===== Step 1: 搜索关键词提取（替换流式步骤）=====
+  // ===== Step 1: 需求分析与关键词提取（结构化渐变展示）=====
   const searchKeyword = aiResult.searchKeyword || query;
   const coreProduct = aiResult.coreProduct || query;
   const modifiers = aiResult.modifiers || {};
-  const allModifiers = [];
-  if (modifiers.style) allModifiers.push(...modifiers.style);
-  if (modifiers.material) allModifiers.push(...modifiers.material);
-  if (modifiers.crowd) allModifiers.push(...modifiers.crowd);
-  if (modifiers.scene) allModifiers.push(...modifiers.scene);
-  if (modifiers.other) allModifiers.push(...modifiers.other);
   
-  const tokens = [searchKeyword, ...allModifiers];
-  const requiredKws = aiResult.requiredKeywords || [];
+  // 先更新标题和基础信息
+  updateStep(step1Live, '🎯', 'Step 1: 需求分析与关键词提取', '', null);
   
-  let step1Detail = '英文搜索词：' + searchKeyword + ' · 核心产品：' + coreProduct;
-  if (allModifiers.length > 0) step1Detail += ' · 修饰词：' + allModifiers.join('、');
-  
-  updateStep(step1Live, '🎯', 'Step 1: 需求分析与关键词提取', step1Detail, tokens);
+  // 添加结构化分析框（渐变逐行展示）
+  const step1Content = step1Live.querySelector('.ai-step-content');
+  if (step1Content) {
+    const step1Box = document.createElement('div');
+    step1Box.className = 'step-analysis-box';
+    
+    const rows = [];
+    
+    // 1. 核心产品
+    rows.push({ label: '核心产品：', content: coreProduct });
+    
+    // 2. 英文搜索词
+    rows.push({ label: '搜索词：', content: searchKeyword });
+    
+    // 3. 修饰词分类
+    const modParts = [];
+    if (modifiers.style && modifiers.style.length > 0) {
+      modParts.push('风格：' + modifiers.style.join('、'));
+    }
+    if (modifiers.material && modifiers.material.length > 0) {
+      modParts.push('材质：' + modifiers.material.join('、'));
+    }
+    if (modifiers.crowd && modifiers.crowd.length > 0) {
+      modParts.push('人群：' + modifiers.crowd.join('、'));
+    }
+    if (modifiers.scene && modifiers.scene.length > 0) {
+      modParts.push('场景：' + modifiers.scene.join('、'));
+    }
+    if (modParts.length > 0) {
+      rows.push({ label: '修饰维度：', content: modParts.join(' ｜ ') });
+    }
+    
+    // 4. 类目建议
+    if (aiResult.categorySuggestion && aiResult.categorySuggestion.categoryName) {
+      rows.push({ label: '推荐类目：', content: aiResult.categorySuggestion.categoryName });
+    }
+    
+    rows.forEach((row, index) => {
+      const rowEl = document.createElement('div');
+      rowEl.className = 'step-analysis-row';
+      rowEl.style.animationDelay = (index * 0.12) + 's';
+      rowEl.innerHTML = 
+        '<span class="label">' + escapeHtml(row.label) + '</span>' +
+        '<span class="keywords">' + escapeHtml(row.content) + '</span>';
+      step1Box.appendChild(rowEl);
+    });
+    
+    step1Content.appendChild(step1Box);
+    
+    // 关键词标签（搜索词 + 修饰词）
+    const allMods = [];
+    if (modifiers.style) allMods.push(...modifiers.style);
+    if (modifiers.material) allMods.push(...modifiers.material);
+    if (modifiers.crowd) allMods.push(...modifiers.crowd);
+    if (modifiers.scene) allMods.push(...modifiers.scene);
+    
+    if (allMods.length > 0) {
+      const tokensEl = document.createElement('div');
+      tokensEl.className = 'ai-step-tokens';
+      tokensEl.style.animationDelay = (rows.length * 0.12) + 's';
+      tokensEl.innerHTML = 
+        '<span class="ai-token main-token">' + escapeHtml(searchKeyword) + '</span>' +
+        allMods.map(m => '<span class="ai-token">' + escapeHtml(m) + '</span>').join('');
+      step1Content.appendChild(tokensEl);
+    }
+  }
 
   // ===== Step 2: 关键词扩展分析（渐变流式展示）=====
   await new Promise(r => setTimeout(r, 300));
