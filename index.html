@@ -1494,6 +1494,8 @@ function processOzonProducts(items, excludedKeywords, requiredKeywords, coreProd
       img: item.image || '',
       link: item.offerUrl || '',
       category: levelName,
+      typeId: String(item.typeId || ''),
+      categoryName: levelName,
       companyType: item.companyType || 0,
       workingMode: item.workingMode || '',
       brand: fixRussianEncoding(item.brand || ''),
@@ -1535,82 +1537,9 @@ async function fetchProductsFromAPI(keyword, aiResult) {
     extraSearchKeywords.push(...expandedKeywords.slice(0, 2));
   }
   
-  // 类目匹配：先搜索商品，从结果中统计高频类目ID
-  let categoryIdList = [];
-  let matchedCategoryName = '';
+  console.log('[搜索策略] 主关键词:', mainSearchKeyword, '扩展词:', extraSearchKeywords);
   
-  // 先做一轮无类目限制的搜索，用于统计类目分布
-  try {
-    const probeReq = {
-      keyWord: mainSearchKeyword,
-      searchType: 2,
-      pageIndex: 1,
-      pageSize: 30,
-      sortField: 'saleVolume30d',
-      sortType: 'desc'
-    };
-    const probeResult = await callOzonSearch(probeReq);
-    
-    if (probeResult && probeResult.list && probeResult.list.length > 0) {
-      // 统计 typeId 出现频率
-      const typeIdCount = {};
-      for (const p of probeResult.list) {
-        if (p.typeId) {
-          typeIdCount[p.typeId] = (typeIdCount[p.typeId] || 0) + 1;
-        }
-      }
-      
-      // 找出出现频率最高的类目（至少出现2次，且占比超过30%）
-      const sortedTypeIds = Object.entries(typeIdCount)
-        .sort((a, b) => b[1] - a[1]);
-      
-      if (sortedTypeIds.length > 0) {
-        const topTypeId = sortedTypeIds[0][0];
-        const topCount = sortedTypeIds[0][1];
-        const total = probeResult.list.length;
-        const ratio = topCount / total;
-        
-        if (topCount >= 3 && ratio >= 0.3) {
-          categoryIdList = [topTypeId];
-          matchedCategoryName = '类目 ' + topTypeId + '（占比 ' + Math.round(ratio * 100) + '%）';
-          console.log('[类目匹配] 统计结果:', typeIdCount, '→ 选择:', topTypeId, '占比:', ratio.toFixed(2));
-        } else {
-          console.log('[类目匹配] 类目分布分散，不做类目过滤', typeIdCount);
-        }
-      }
-    }
-  } catch (e) {
-    console.warn('[类目匹配] 探测搜索失败:', e.message);
-  }
-  
-  // 备选：如果统计没匹配到，再尝试用 get_ozon_category 接口
-  if (categoryIdList.length === 0) {
-    const categorySearchKeywords = [];
-    if (aiResult && aiResult.categorySuggestion && aiResult.categorySuggestion.categoryName) {
-      categorySearchKeywords.push(aiResult.categorySuggestion.categoryName);
-    }
-    categorySearchKeywords.push(coreProduct);
-    categorySearchKeywords.push(keyword);
-    
-    for (const catKw of categorySearchKeywords) {
-      if (categoryIdList.length > 0) break;
-      try {
-        const categories = await callOzonCategorySearch(catKw);
-        const validCats = categories.filter(c => c.id);
-        if (validCats.length > 0) {
-          categoryIdList = [validCats[0].id];
-          matchedCategoryName = validCats[0].name || catKw;
-          console.log('[类目匹配] 接口搜索:', catKw, '→ 类目ID:', validCats[0].id);
-        }
-      } catch (e) {
-        console.warn('[类目匹配] 接口失败 [' + catKw + ']:', e.message);
-      }
-    }
-  }
-  
-  console.log('[搜索策略] 主关键词:', mainSearchKeyword, '类目:', categoryIdList, '扩展词:', extraSearchKeywords);
-  
-  // 第一轮：主关键词 + 类目搜索（词组匹配）
+  // 第一轮：主关键词搜索（词组匹配，不加类目过滤）
   try {
     const req = {
       keyWord: mainSearchKeyword,
@@ -1620,9 +1549,6 @@ async function fetchProductsFromAPI(keyword, aiResult) {
       sortField: 'saleVolume30d',
       sortType: 'desc'
     };
-    if (categoryIdList.length > 0) {
-      req.categoryIdList = categoryIdList;
-    }
     
     const result = await callOzonSearch(req);
     
@@ -1644,11 +1570,11 @@ async function fetchProductsFromAPI(keyword, aiResult) {
     console.warn('第一轮搜索失败:', e.message);
   }
   
-  // 第二轮：扩展词 + 类目搜索
-  if (extraSearchKeywords.length > 0 && allProducts.length < 50) {
+  // 第二轮：扩展词搜索（不加类目过滤）
+  if (extraSearchKeywords.length > 0 && allProducts.length < 60) {
     const expandWords = extraSearchKeywords.slice(0, 4);
     for (const expWord of expandWords) {
-      if (allProducts.length >= 50) break;
+      if (allProducts.length >= 60) break;
       try {
         const req = {
           keyWord: expWord,
@@ -1658,9 +1584,6 @@ async function fetchProductsFromAPI(keyword, aiResult) {
           sortField: 'saleVolume30d',
           sortType: 'desc'
         };
-        if (categoryIdList.length > 0) {
-          req.categoryIdList = categoryIdList;
-        }
         
         const result = await callOzonSearch(req);
         if (result && result.list && Array.isArray(result.list)) {
@@ -1683,38 +1606,7 @@ async function fetchProductsFromAPI(keyword, aiResult) {
     }
   }
   
-  // 兜底1：如果结果太少，去掉类目限制用主关键词再搜
-  if (allProducts.length < 10 && categoryIdList.length > 0) {
-    try {
-      const req = {
-        keyWord: mainSearchKeyword,
-        searchType: 2,
-        pageIndex: 1,
-        pageSize: 50,
-        sortField: 'saleVolume30d',
-        sortType: 'desc'
-      };
-      const result = await callOzonSearch(req);
-      if (result && result.list && Array.isArray(result.list)) {
-        const products = processOzonProducts(
-          result.list,
-          excludedKeywords,
-          [],
-          coreProduct
-        );
-        for (const p of products) {
-          if (!seenIds.has(p.id)) {
-            seenIds.add(p.id);
-            allProducts.push(p);
-          }
-        }
-      }
-    } catch (e) {
-      console.warn('去类目兜底搜索失败:', e.message);
-    }
-  }
-  
-  // 兜底2：如果还是没结果，用英文关键词+模糊匹配(searchType=1)试试
+  // 兜底：如果结果太少，用英文关键词+模糊匹配(searchType=1)试试
   if (allProducts.length < 5 && englishKeyword !== mainSearchKeyword) {
     try {
       const req = {
@@ -1745,7 +1637,37 @@ async function fetchProductsFromAPI(keyword, aiResult) {
     }
   }
   
-  return { products: allProducts, categoryId: categoryIdList[0] || '', categoryName: matchedCategoryName };
+  // 统计类目分布（用于展示，不做过滤）
+  const categoryStats = {};
+  for (const p of allProducts) {
+    if (p.typeId) {
+      if (!categoryStats[p.typeId]) {
+        categoryStats[p.typeId] = { count: 0, name: p.categoryName || '' };
+      }
+      categoryStats[p.typeId].count++;
+    }
+  }
+  
+  // 排序取Top类目
+  const topCategories = Object.entries(categoryStats)
+    .sort((a, b) => b[1].count - a[1].count)
+    .slice(0, 5)
+    .map(([id, data]) => ({
+      id: id,
+      count: data.count,
+      name: data.name || ('类目' + id),
+      ratio: Math.round((data.count / allProducts.length) * 100)
+    }));
+  
+  console.log('[类目分布]', topCategories);
+  
+  return {
+    products: allProducts,
+    categoryId: '',
+    categoryName: '',
+    categoryStats: topCategories,
+    totalCount: allProducts.length
+  };
 }
 
 // ===== 状态 =====
@@ -2178,23 +2100,20 @@ async function doSearch() {
     }
   }
 
-  // ===== Step 3: 类目匹配（实时调用接口）=====
+  // ===== Step 3: 类目分布分析（搜索后统计）=====
   await new Promise(r => setTimeout(r, 250));
-  const step3 = addLoadingStep('📂', 'Step 3: 类目匹配中...', '正在匹配OZON选品库类目...');
-  
-  // 类目匹配会在 fetchProductsFromAPI 内部完成，这里先显示loading
-  // 等搜索完成后再更新 Step 3 状态
+  const step3 = addLoadingStep('📊', 'Step 3: 类目分布分析中...', '搜索完成后将展示类目分布...');
   
   // ===== Step 4: 调用OZON MCP获取商品 =====
   const step4 = addLoadingStep('📡', 'Step 4: OZON商品搜索');
   
   let products = [];
-  let matchedCategory = { id: '', name: '' };
+  let categoryStats = [];
   const apiStartTime = performance.now();
   try {
     const result = await fetchProductsFromAPI(query, aiResult);
     products = result.products || [];
-    matchedCategory = { id: result.categoryId || '', name: result.categoryName || '' };
+    categoryStats = result.categoryStats || [];
   } catch (e) {
     console.warn('API调用失败:', e.message);
   } finally {
@@ -2203,16 +2122,17 @@ async function doSearch() {
     updateTimingDisplay({ agent: agentDuration, api: apiDuration, total: performance.now() - totalStartTime });
   }
   
-  // 更新 Step 3: 类目匹配结果
-  if (matchedCategory.id) {
-    updateStep(step3, '✅', 'Step 3: 类目匹配成功', 
-      '匹配到类目 ID: ' + matchedCategory.id + ' · 已启用类目过滤',
-      [matchedCategory.name || '已匹配类目']
+  // 更新 Step 3: 类目分布分析结果
+  if (categoryStats.length > 0) {
+    const topCat = categoryStats[0];
+    const catTags = categoryStats.map(c => '类目' + c.id + ' (' + c.ratio + '%)');
+    updateStep(step3, '✅', 'Step 3: 类目分布分析', 
+      '共覆盖 ' + categoryStats.length + ' 个类目 · Top类目占比 ' + topCat.ratio + '%',
+      catTags
     );
   } else {
-    updateStep(step3, '⚠️', 'Step 3: 类目匹配', 
-      '未匹配到精确类目，将进行全量关键词搜索'
-    );
+    updateStep(step3, '⚠️', 'Step 3: 类目分布分析', 
+      '暂无类目数据');
   }
   
   if (products.length > 0) {
