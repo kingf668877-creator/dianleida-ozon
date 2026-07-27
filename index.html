@@ -1523,33 +1523,6 @@ async function fetchProductsFromAPI(keyword, aiResult) {
   const requiredKeywords = (aiResult && aiResult.requiredKeywords) || [];
   const coreProduct = (aiResult && aiResult.coreProduct) || keyword;
   
-  // 类目匹配：用核心产品词搜索类目，取第一个匹配的类目
-  let categoryIdList = [];
-  let matchedCategoryName = '';
-  
-  // 先尝试用 AI 给出的类目名搜索
-  const categorySearchKeywords = [];
-  if (aiResult && aiResult.categorySuggestion && aiResult.categorySuggestion.categoryName) {
-    categorySearchKeywords.push(aiResult.categorySuggestion.categoryName);
-  }
-  categorySearchKeywords.push(coreProduct); // 核心产品名
-  categorySearchKeywords.push(keyword); // 原始搜索词
-  
-  for (const catKw of categorySearchKeywords) {
-    if (categoryIdList.length > 0) break;
-    try {
-      const categories = await callOzonCategorySearch(catKw);
-      if (categories.length > 0) {
-        // 取第一个有效类目
-        categoryIdList = [categories[0].id];
-        matchedCategoryName = categories[0].name || catKw;
-        console.log('[类目匹配] 关键词:', catKw, '→ 类目ID:', categories[0].id);
-      }
-    } catch (e) {
-      console.warn('[类目匹配] 失败 [' + catKw + ']:', e.message);
-    }
-  }
-  
   // 主搜索词：优先用俄语第一个关键词，没有则用英文
   const mainSearchKeyword = (russianKeywords.length > 0) ? russianKeywords[0] : englishKeyword;
   
@@ -1560,6 +1533,79 @@ async function fetchProductsFromAPI(keyword, aiResult) {
   }
   if (expandedKeywords.length > 0) {
     extraSearchKeywords.push(...expandedKeywords.slice(0, 2));
+  }
+  
+  // 类目匹配：先搜索商品，从结果中统计高频类目ID
+  let categoryIdList = [];
+  let matchedCategoryName = '';
+  
+  // 先做一轮无类目限制的搜索，用于统计类目分布
+  try {
+    const probeReq = {
+      keyWord: mainSearchKeyword,
+      searchType: 2,
+      pageIndex: 1,
+      pageSize: 30,
+      sortField: 'saleVolume30d',
+      sortType: 'desc'
+    };
+    const probeResult = await callOzonSearch(probeReq);
+    
+    if (probeResult && probeResult.list && probeResult.list.length > 0) {
+      // 统计 typeId 出现频率
+      const typeIdCount = {};
+      for (const p of probeResult.list) {
+        if (p.typeId) {
+          typeIdCount[p.typeId] = (typeIdCount[p.typeId] || 0) + 1;
+        }
+      }
+      
+      // 找出出现频率最高的类目（至少出现2次，且占比超过30%）
+      const sortedTypeIds = Object.entries(typeIdCount)
+        .sort((a, b) => b[1] - a[1]);
+      
+      if (sortedTypeIds.length > 0) {
+        const topTypeId = sortedTypeIds[0][0];
+        const topCount = sortedTypeIds[0][1];
+        const total = probeResult.list.length;
+        const ratio = topCount / total;
+        
+        if (topCount >= 3 && ratio >= 0.3) {
+          categoryIdList = [topTypeId];
+          matchedCategoryName = '类目 ' + topTypeId + '（占比 ' + Math.round(ratio * 100) + '%）';
+          console.log('[类目匹配] 统计结果:', typeIdCount, '→ 选择:', topTypeId, '占比:', ratio.toFixed(2));
+        } else {
+          console.log('[类目匹配] 类目分布分散，不做类目过滤', typeIdCount);
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[类目匹配] 探测搜索失败:', e.message);
+  }
+  
+  // 备选：如果统计没匹配到，再尝试用 get_ozon_category 接口
+  if (categoryIdList.length === 0) {
+    const categorySearchKeywords = [];
+    if (aiResult && aiResult.categorySuggestion && aiResult.categorySuggestion.categoryName) {
+      categorySearchKeywords.push(aiResult.categorySuggestion.categoryName);
+    }
+    categorySearchKeywords.push(coreProduct);
+    categorySearchKeywords.push(keyword);
+    
+    for (const catKw of categorySearchKeywords) {
+      if (categoryIdList.length > 0) break;
+      try {
+        const categories = await callOzonCategorySearch(catKw);
+        const validCats = categories.filter(c => c.id);
+        if (validCats.length > 0) {
+          categoryIdList = [validCats[0].id];
+          matchedCategoryName = validCats[0].name || catKw;
+          console.log('[类目匹配] 接口搜索:', catKw, '→ 类目ID:', validCats[0].id);
+        }
+      } catch (e) {
+        console.warn('[类目匹配] 接口失败 [' + catKw + ']:', e.message);
+      }
+    }
   }
   
   console.log('[搜索策略] 主关键词:', mainSearchKeyword, '类目:', categoryIdList, '扩展词:', extraSearchKeywords);
