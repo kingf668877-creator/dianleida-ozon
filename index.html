@@ -1467,16 +1467,32 @@ async function fetchProductsFromAPI(keyword, aiResult) {
     categoryIdList = [aiResult.categorySuggestion.categoryId];
   }
   
-  const searchKeyword = (aiResult && aiResult.searchKeyword) || keyword;
+  const englishKeyword = (aiResult && aiResult.searchKeyword) || keyword;
   const expandedKeywords = (aiResult && aiResult.expandedKeywords) || [];
+  const russianKeywords = (aiResult && aiResult.russianKeywords) || [];
   const excludedKeywords = (aiResult && aiResult.excludedKeywords) || [];
   const requiredKeywords = (aiResult && aiResult.requiredKeywords) || [];
   const coreProduct = (aiResult && aiResult.coreProduct) || keyword;
   
-  // 第一轮：主关键词搜索
+  // 主搜索词：优先用俄语第一个关键词，没有则用英文
+  const mainSearchKeyword = (russianKeywords.length > 0) ? russianKeywords[0] : englishKeyword;
+  
+  // 扩展搜索词：俄语关键词剩余的 + 英文扩展词
+  const extraSearchKeywords = [];
+  if (russianKeywords.length > 1) {
+    extraSearchKeywords.push(...russianKeywords.slice(1, 4));
+  }
+  if (expandedKeywords.length > 0) {
+    extraSearchKeywords.push(...expandedKeywords.slice(0, 2));
+  }
+  
+  console.log('[搜索策略] 主关键词:', mainSearchKeyword, '扩展词:', extraSearchKeywords);
+  
+  // 第一轮：主关键词搜索（词组匹配）
   try {
     const req = {
-      keyWord: searchKeyword,
+      keyWord: mainSearchKeyword,
+      searchType: 2,
       pageIndex: 1,
       pageSize: 50,
       sortField: 'saleVolume30d',
@@ -1507,13 +1523,14 @@ async function fetchProductsFromAPI(keyword, aiResult) {
   }
   
   // 第二轮：扩展词搜索
-  if (expandedKeywords.length > 0 && allProducts.length < 50) {
-    const expandWords = expandedKeywords.slice(0, 3);
+  if (extraSearchKeywords.length > 0 && allProducts.length < 50) {
+    const expandWords = extraSearchKeywords.slice(0, 4);
     for (const expWord of expandWords) {
       if (allProducts.length >= 50) break;
       try {
         const req = {
           keyWord: expWord,
+          searchType: 2,
           pageIndex: 1,
           pageSize: 30,
           sortField: 'saleVolume30d',
@@ -1544,11 +1561,12 @@ async function fetchProductsFromAPI(keyword, aiResult) {
     }
   }
   
-  // 兜底：如果结果太少，去掉类目限制重新搜索
+  // 兜底：如果结果太少，去掉类目限制用主关键词再搜
   if (allProducts.length < 10 && categoryIdList.length > 0) {
     try {
       const req = {
-        keyWord: searchKeyword,
+        keyWord: mainSearchKeyword,
+        searchType: 2,
         pageIndex: 1,
         pageSize: 50,
         sortField: 'saleVolume30d',
@@ -1571,6 +1589,37 @@ async function fetchProductsFromAPI(keyword, aiResult) {
       }
     } catch (e) {
       console.warn('兜底搜索失败:', e.message);
+    }
+  }
+  
+  // 最终兜底：如果还是没结果，用英文关键词+模糊匹配(searchType=1)试试
+  if (allProducts.length < 5 && englishKeyword !== mainSearchKeyword) {
+    try {
+      const req = {
+        keyWord: englishKeyword,
+        searchType: 1,
+        pageIndex: 1,
+        pageSize: 30,
+        sortField: 'saleVolume30d',
+        sortType: 'desc'
+      };
+      const result = await callOzonSearch(req);
+      if (result && result.list && Array.isArray(result.list)) {
+        const products = processOzonProducts(
+          result.list,
+          excludedKeywords,
+          [],
+          coreProduct
+        );
+        for (const p of products) {
+          if (!seenIds.has(p.id)) {
+            seenIds.add(p.id);
+            allProducts.push(p);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('英文兜底搜索失败:', e.message);
     }
   }
   
@@ -1930,7 +1979,7 @@ async function doSearch() {
       // 5. 原则/说明
       analysisRows.push({
         label: '原则：',
-        content: '英文词用于API搜索，俄语词用于词组匹配，排除词过滤不相关商品'
+        content: '俄语词用于主搜索（词组匹配），英文词作为备用搜索，排除词过滤不相关商品'
       });
       
       analysisRows.forEach((row, index) => {
@@ -1969,7 +2018,7 @@ async function doSearch() {
     const russianText = russianKeywords.join(', ');
     
     russianEl.innerHTML = 
-      '<div class="russian-keywords-title">🇷🇺 俄语关键词组合（词组匹配用）</div>' +
+      '<div class="russian-keywords-title">🇷🇺 俄语关键词（主搜索词·词组匹配）</div>' +
       '<div class="russian-keywords-text">' + keywordsHtml + '</div>' +
       '<button class="copy-btn" onclick="navigator.clipboard.writeText(\'' + escapeHtml(russianText).replace(/'/g, "\\'") + '\');this.textContent=\'已复制✓\';this.classList.add(\'copied\');setTimeout(()=>{this.textContent=\'复制\';this.classList.remove(\'copied\')},2000)">复制全部</button>';
     
@@ -1985,7 +2034,7 @@ async function doSearch() {
     const englishEl = document.createElement('div');
     englishEl.className = 'english-keywords-box';
     englishEl.innerHTML = 
-      '<div class="english-keywords-title">🔤 英文搜索词（API搜索用）</div>' +
+      '<div class="english-keywords-title">🔤 英文搜索词（备用）</div>' +
       expanded.map(kw => '<span class="english-keyword-tag">' + escapeHtml(kw) + '</span>').join('');
     
     const lastStep3 = document.getElementById('ai-steps').lastElementChild;
