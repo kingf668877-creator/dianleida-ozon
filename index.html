@@ -925,6 +925,19 @@ const MCP_API_URL = 'https://mcp.dianleida.net/mcp?secret-key=9b921e202725436ba1
 let mcpInitialized = false;
 let mcpRequestId = 0;
 
+// 限流保护：请求间隔 600ms，被限流后等待 3 秒重试
+const MCP_REQUEST_INTERVAL = 600;
+let lastMcpRequestTime = 0;
+
+async function waitForRateLimit() {
+  const now = Date.now();
+  const elapsed = now - lastMcpRequestTime;
+  if (elapsed < MCP_REQUEST_INTERVAL) {
+    await new Promise(r => setTimeout(r, MCP_REQUEST_INTERVAL - elapsed));
+  }
+  lastMcpRequestTime = Date.now();
+}
+
 // ===== MCP 初始化 =====
 async function initMCP() {
   if (mcpInitialized) return;
@@ -1027,27 +1040,73 @@ async function callOzonCategorySearch(keyWord) {
 async function callOzonSearch(req) {
   await initMCP();
   
-  const resp = await fetch(MCP_API_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      id: ++mcpRequestId,
-      method: 'tools/call',
-      params: {
-        name: 'ozon_query_list',
-        arguments: { req: req }
+  const maxRetries = 2;
+  let lastError = null;
+  
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    // 限流等待（每个请求间隔 600ms）
+    await waitForRateLimit();
+    
+    try {
+      const resp = await fetch(MCP_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: ++mcpRequestId,
+          method: 'tools/call',
+          params: {
+            name: 'ozon_query_list',
+            arguments: { req: req }
+          }
+        })
+      });
+      
+      if (resp.status === 429) {
+        console.warn('[限流] HTTP 429，等待 3 秒后重试');
+        await new Promise(r => setTimeout(r, 3000));
+        continue;
       }
-    })
-  });
-  
-  if (!resp.ok) throw new Error('MCP HTTP错误: ' + resp.status);
-  
-  const data = await resp.json();
-  
-  if (data.error) {
-    throw new Error(data.error.message || 'MCP调用错误');
+      
+      if (!resp.ok) throw new Error('MCP HTTP错误: ' + resp.status);
+      
+      const data = await resp.json();
+      
+      // 检查响应中的限流错误
+      if (data.result && data.result.content) {
+        const contentArr = Array.isArray(data.result.content) ? data.result.content : [data.result.content];
+        const textItem = contentArr.find(c => c && c.type === 'text');
+        if (textItem && textItem.text) {
+          // 检查是否包含限流错误信息
+          if (textItem.text.includes('请求频率过高') || textItem.text.includes('rate limit')) {
+            console.warn('[限流] 响应包含频率限制，等待 3 秒后重试');
+            await new Promise(r => setTimeout(r, 3000));
+            continue;
+          }
+        }
+      }
+      
+      if (data.error) {
+        throw new Error(data.error.message || 'MCP调用错误');
+      }
+      
+      return parseOzonSearchResult(data);
+      
+    } catch (e) {
+      lastError = e;
+      if (attempt < maxRetries) {
+        await new Promise(r => setTimeout(r, 1500));
+        continue;
+      }
+      throw e;
+    }
   }
+  
+  throw lastError || new Error('MCP调用失败');
+}
+
+// 解析 OZON 搜索结果（独立函数，便于重试）
+function parseOzonSearchResult(data) {
   
   let resultText = '';
   if (data.result && data.result.content) {
@@ -1491,14 +1550,14 @@ async function fetchProductsFromAPI(keyword, aiResult) {
   // 主搜索词：优先用俄语第一个关键词，没有则用英文
   const mainSearchKeyword = (russianKeywords.length > 0) ? russianKeywords[0] : englishKeyword;
   
-  // 扩展搜索词：俄语关键词剩余的 + 英文扩展词
+  // 扩展搜索词：俄语关键词剩余的 + 英文扩展词（精简版，减少 API 调用避免限流）
   // 中文关键词用于客户端二次过滤（OZON keyWord 不支持中文匹配 subjectCn）
   const extraSearchKeywords = [];
   if (russianKeywords.length > 1) {
-    extraSearchKeywords.push(...russianKeywords.slice(1, 4));
+    extraSearchKeywords.push(...russianKeywords.slice(1, 2));
   }
   if (expandedKeywords.length > 0) {
-    extraSearchKeywords.push(...expandedKeywords.slice(0, 2));
+    extraSearchKeywords.push(...expandedKeywords.slice(0, 1));
   }
   
   console.log('[搜索策略] 主关键词:', mainSearchKeyword, '扩展词:', extraSearchKeywords);
@@ -1534,9 +1593,9 @@ async function fetchProductsFromAPI(keyword, aiResult) {
     console.warn('第一轮搜索失败:', e.message);
   }
   
-  // 第二轮：扩展词搜索（不加类目过滤）
+  // 第二轮：扩展词搜索（不加类目过滤，最多 2 个扩展词）
   if (extraSearchKeywords.length > 0 && allProducts.length < 60) {
-    const expandWords = extraSearchKeywords.slice(0, 4);
+    const expandWords = extraSearchKeywords.slice(0, 2);
     for (const expWord of expandWords) {
       if (allProducts.length >= 60) break;
       try {
@@ -2112,6 +2171,7 @@ async function doSearch() {
   
   let products = [];
   let categoryStats = [];
+  let apiErrorMessage = '';
   const apiStartTime = performance.now();
   try {
     const result = await fetchProductsFromAPI(query, aiResult);
@@ -2119,7 +2179,9 @@ async function doSearch() {
     categoryStats = result.categoryStats || [];
   } catch (e) {
     console.warn('API调用失败:', e.message);
+    apiErrorMessage = e.message || '未知错误';
   } finally {
+    window._lastApiError = apiErrorMessage;
     apiDuration = performance.now() - apiStartTime;
     console.log('[耗时统计] OZON API:', formatDuration(apiDuration));
     updateTimingDisplay({ agent: agentDuration, api: apiDuration, total: performance.now() - totalStartTime });
@@ -2147,8 +2209,13 @@ async function doSearch() {
       ['实时API', products.length + '件商品']
     );
   } else {
-    updateStep(step4, '⚠️', 'Step 4: OZON商品搜索', 
-      '暂未获取到商品数据，请稍后重试或更换关键词');
+    let errDetail = '请稍后重试或更换关键词';
+    if (apiErrorMessage.includes('请求频率过高') || apiErrorMessage.includes('rate limit')) {
+      errDetail = '⚠️ API请求频率过高被限流，已自动重试3次仍未恢复。请等待 30 秒后重试';
+    } else if (apiErrorMessage) {
+      errDetail = '错误：' + apiErrorMessage;
+    }
+    updateStep(step4, '⚠️', 'Step 4: OZON商品搜索', errDetail);
   }
   
   // 隐藏顶部loading
@@ -2178,9 +2245,14 @@ function renderProducts(products, page) {
   document.getElementById('products-count').textContent = total + ' 件';
   const grid = document.getElementById('product-grid');
   const paginationEl = document.getElementById('pagination');
+  const apiErrorMessage = window._lastApiError || '';
   
   if (!products || products.length === 0) {
-    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px;color:#999;">暂无相关商品，请尝试其他关键词</div>';
+    let emptyMsg = '暂无相关商品，请尝试其他关键词';
+    if (apiErrorMessage && (apiErrorMessage.includes('请求频率过高') || apiErrorMessage.includes('rate limit'))) {
+      emptyMsg = '⚠️ OZON API 请求频率过高被限流，请等待 30 秒后再试';
+    }
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px;color:#999;">' + emptyMsg + '</div>';
     paginationEl.style.display = 'none';
     return;
   }
