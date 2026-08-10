@@ -460,6 +460,48 @@ body {
   font-size: 11px;
   font-weight: 400;
 }
+
+/* 中文关键词展示 */
+.chinese-keywords-box {
+  margin-top: 12px;
+  padding: 12px 14px;
+  background: linear-gradient(135deg, #FEF2F2 0%, #FEE2E2 100%);
+  border-radius: 10px;
+  border: 1px solid #FECACA;
+}
+.chinese-keywords-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #B91C1C;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.chinese-keywords-text {
+  font-size: 13px;
+  color: #991B1B;
+  line-height: 1.8;
+  word-break: break-all;
+  font-weight: 500;
+}
+.chinese-keyword-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 2px 4px 2px 0;
+  padding: 3px 10px;
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid #FCA5A5;
+  font-size: 12px;
+  color: #DC2626;
+}
+.chinese-keyword-item .meaning {
+  color: #64748B;
+  font-size: 11px;
+  font-weight: 400;
+}
 .copy-btn {
   margin-top: 8px;
   padding: 4px 12px;
@@ -571,12 +613,23 @@ body {
   font-size: 13px;
   color: #333;
   line-height: 1.4;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
   min-height: 36px;
+}
+.product-title-cn {
+  font-size: 12px;
+  color: #6B7280;
+  line-height: 1.4;
+  margin-bottom: 8px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 18px;
 }
 .product-price {
   font-size: 17px;
@@ -611,6 +664,7 @@ body {
 .badge-fbo { background: #FCF5E5; color: #D48806; }
 .badge-fbs { background: #F6FFED; color: #52C41A; }
 .badge-hot { background: #FFF1F0; color: #FF4D4F; }
+.badge-cn-match { background: #FEF2F2; color: #DC2626; }
 
 /* 分页样式 */
 .pagination {
@@ -1343,13 +1397,16 @@ function processOzonProducts(items, excludedKeywords, requiredKeywords, coreProd
   for (const item of items) {
     const subjectRaw = item.subject || '';
     const subject = fixRussianEncoding(subjectRaw);
+    const subjectCnRaw = item.subjectCn || '';
+    const subjectCn = fixRussianEncoding(subjectCnRaw);
     const levelName = fixRussianEncoding(item.levelName || '');
     
     const title = subject.toLowerCase();
+    const titleCn = subjectCn.toLowerCase();
     
     let skip = false;
     for (const ex of excluded) {
-      if (ex.length >= 2 && title.includes(ex)) { skip = true; break; }
+      if (ex.length >= 2 && (title.includes(ex) || titleCn.includes(ex))) { skip = true; break; }
     }
     if (skip) continue;
     
@@ -1357,14 +1414,24 @@ function processOzonProducts(items, excludedKeywords, requiredKeywords, coreProd
       let matchCount = 0;
       for (const rq of required) {
         if (!rq) continue;
-        if (title.includes(rq.toLowerCase())) matchCount++;
+        const lowerRq = rq.toLowerCase();
+        if (title.includes(lowerRq) || titleCn.includes(lowerRq)) matchCount++;
       }
       const threshold = required.length <= 2 ? required.length : Math.ceil(required.length * 2 / 3);
       if (matchCount < threshold) continue;
     }
     
     let relevanceScore = 0;
-    if (core && title.includes(core)) relevanceScore += 10;
+    if (core && (title.includes(core) || titleCn.includes(core))) relevanceScore += 10;
+    
+    // 中文关键词命中加分（中文关键词仅用于客户端匹配 subjectCn）
+    let chineseMatch = false;
+    for (const cnKw of (processOzonProducts._chineseKeywords || [])) {
+      if (cnKw && titleCn.includes(cnKw.toLowerCase())) {
+        relevanceScore += 8;
+        chineseMatch = true;
+      }
+    }
     
     const salesScore = Math.min(2, Math.log10((item.saleQuantity30d || 0) + 1) / 3);
     relevanceScore += salesScore;
@@ -1374,6 +1441,7 @@ function processOzonProducts(items, excludedKeywords, requiredKeywords, coreProd
     result.push({
       id: String(item.offerId || ''),
       title: subject,
+      titleCn: subjectCn,
       price: item.price || 0,
       priceRmb: item.priceRmb || 0,
       sales: item.saleQuantity30d || 0,
@@ -1389,6 +1457,7 @@ function processOzonProducts(items, excludedKeywords, requiredKeywords, coreProd
       companyType: item.companyType || 0,
       workingMode: item.workingMode || '',
       brand: fixRussianEncoding(item.brand || ''),
+      matchedByChinese: chineseMatch,
       _relevance: relevanceScore,
       _raw: item
     });
@@ -1411,14 +1480,19 @@ async function fetchProductsFromAPI(keyword, aiResult) {
   const englishKeyword = (aiResult && aiResult.searchKeyword) || keyword;
   const expandedKeywords = (aiResult && aiResult.expandedKeywords) || [];
   const russianKeywords = (aiResult && aiResult.russianKeywords) || [];
+  const chineseKeywords = (aiResult && aiResult.chineseKeywords) || [];
   const excludedKeywords = (aiResult && aiResult.excludedKeywords) || [];
   const requiredKeywords = (aiResult && aiResult.requiredKeywords) || [];
   const coreProduct = (aiResult && aiResult.coreProduct) || keyword;
+  
+  // 把中文关键词注入 processOzonProducts（用于客户端命中加分）
+  processOzonProducts._chineseKeywords = chineseKeywords;
   
   // 主搜索词：优先用俄语第一个关键词，没有则用英文
   const mainSearchKeyword = (russianKeywords.length > 0) ? russianKeywords[0] : englishKeyword;
   
   // 扩展搜索词：俄语关键词剩余的 + 英文扩展词
+  // 中文关键词用于客户端二次过滤（OZON keyWord 不支持中文匹配 subjectCn）
   const extraSearchKeywords = [];
   if (russianKeywords.length > 1) {
     extraSearchKeywords.push(...russianKeywords.slice(1, 4));
@@ -1845,6 +1919,8 @@ async function doSearch() {
   const excluded = aiResult.excludedKeywords || [];
   const russianKeywords = aiResult.russianKeywords || [];
   const russianKeywordsExplain = aiResult.russianKeywordsExplain || [];
+  const chineseKeywords = aiResult.chineseKeywords || [];
+  const chineseKeywordsExplain = aiResult.chineseKeywordsExplain || [];
   
   // 构建候选词列表（修饰词 + 扩展词）
   const candidateKeywords = [];
@@ -1859,6 +1935,7 @@ async function doSearch() {
   
   let step2Detail = '候选 ' + candidateKeywords.length + ' 个 · 选择 ' + selectedKeywords.length + ' 个搜索词';
   if (russianKeywords.length > 0) step2Detail += ' · 俄语 ' + russianKeywords.length + ' 个';
+  if (chineseKeywords.length > 0) step2Detail += ' · 中文 ' + chineseKeywords.length + ' 个';
   if (excluded.length > 0) step2Detail += ' · 排除 ' + excluded.length + ' 个';
   
   addStep('🔗', 'Step 2: 搜索词分析扩展', step2Detail, null);
@@ -1896,7 +1973,15 @@ async function doSearch() {
         });
       }
       
-      // 4. 排除词
+      // 4. 中文关键词
+      if (chineseKeywords.length > 0) {
+        analysisRows.push({
+          label: '中文：',
+          content: chineseKeywords.slice(0, 8).join('、') + (chineseKeywords.length > 8 ? ' 等' : '')
+        });
+      }
+      
+      // 5. 排除词
       if (excluded.length > 0) {
         analysisRows.push({
           label: '排除：',
@@ -1904,10 +1989,10 @@ async function doSearch() {
         });
       }
       
-      // 5. 原则/说明
+      // 6. 原则/说明
       analysisRows.push({
         label: '原则：',
-        content: '俄语词用于主搜索（词组匹配），英文词作为备用搜索，排除词过滤不相关商品'
+        content: '俄语词用于主搜索（词组匹配），中文词用于中文标题匹配，英文词作为备用搜索，排除词过滤不相关商品'
       });
       
       analysisRows.forEach((row, index) => {
@@ -1954,6 +2039,40 @@ async function doSearch() {
     if (lastStep2) {
       const contentEl2 = lastStep2.querySelector('.ai-step-content');
       if (contentEl2) contentEl2.appendChild(russianEl);
+    }
+  }
+  
+  // 中文关键词详情框（如果有）
+  if (chineseKeywords.length > 0) {
+    const chineseEl = document.createElement('div');
+    chineseEl.className = 'chinese-keywords-box';
+    
+    let keywordsHtml = '';
+    if (chineseKeywordsExplain && chineseKeywordsExplain.length > 0) {
+      keywordsHtml = chineseKeywordsExplain.map(item => 
+        '<span class="chinese-keyword-item">' + 
+          escapeHtml(item.keyword || item) + 
+          (item.meaning ? ' <span class="meaning">(' + escapeHtml(item.meaning) + ')</span>' : '') +
+        '</span>'
+      ).join('');
+    } else {
+      keywordsHtml = chineseKeywords.map(kw => 
+        '<span class="chinese-keyword-item">' + escapeHtml(kw) + '</span>'
+      ).join('');
+    }
+    
+    const chineseText = chineseKeywords.join(', ');
+    
+    chineseEl.innerHTML = 
+      '<div class="chinese-keywords-title">🇨🇳 中文关键词（中文标题匹配）</div>' +
+      '<div class="chinese-keywords-text">' + keywordsHtml + '</div>' +
+      '<button class="copy-btn" onclick="navigator.clipboard.writeText(\'' + escapeHtml(chineseText).replace(/'/g, "\\'") + '\');this.textContent=\'已复制✓\';this.classList.add(\'copied\');setTimeout(()=>{this.textContent=\'复制\';this.classList.remove(\'copied\')},2000)">复制全部</button>';
+    
+    const lastStep2 = document.getElementById('ai-steps').lastElementChild;
+    if (lastStep2) {
+      const contentEl2 = lastStep2.querySelector('.ai-step-content');
+      if (contentEl2) chineseEl.style.cssText = 'margin-top:10px;';
+      if (contentEl2) contentEl2.appendChild(chineseEl);
     }
   }
   
@@ -2106,6 +2225,7 @@ function renderProducts(products, page) {
       }
     }
     if ((p.sales || 0) > 1000) badges += '<span class="product-badge badge-hot">热销</span>';
+    if (p.matchedByChinese) badges += '<span class="product-badge badge-cn-match">中文命中</span>';
     
     const priceRub = p.price ? Number(p.price).toLocaleString() : '0';
     const priceRmb = p.priceRmb ? '¥' + Number(p.priceRmb).toFixed(0) : '';
@@ -2116,6 +2236,7 @@ function renderProducts(products, page) {
       <div class="product-img-wrap">${imgHtml}</div>
       <div class="product-info">
         <div class="product-title">${badges}${escapeHtml(p.title)}</div>
+        ${p.titleCn ? `<div class="product-title-cn">🇨🇳 ${escapeHtml(p.titleCn)}</div>` : ''}
         <div class="product-price">${priceRub} <span>₽</span><span class="product-price-rmb">${priceRmb}</span></div>
         <div class="product-meta">
           <span>月销 ${(p.sales || 0).toLocaleString()}</span>
