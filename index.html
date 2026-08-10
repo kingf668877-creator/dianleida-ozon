@@ -1393,6 +1393,26 @@ async function callCozeBot(botId, query, onStreamDelta) {
             }
             
             addDebugLog('所有JSON解析尝试失败，原始内容前300字: ' + contentToParse.substring(0, 300));
+            // 尝试补全截断的 JSON（截到 products 之前，补上 products:[]）
+            addDebugLog('尝试自动补全截断的 JSON...');
+            const truncatedIdx = contentToParse.indexOf('"products"');
+            if (truncatedIdx > 0) {
+              let prefix = contentToParse.substring(0, truncatedIdx);
+              // 补全 prefix 末尾的逗号和 products
+              prefix = prefix.trimEnd();
+              if (prefix.endsWith(',')) {
+                prefix = prefix.substring(0, prefix.length - 1);
+              }
+              const patched = prefix + ', "products": [], "truncated": true, "_warning": "JSON被max_tokens截断，已自动补全"}';
+              try {
+                const result = JSON.parse(patched);
+                addDebugLog('自动补全 JSON 成功，长度: ' + patched.length);
+                resolve(result);
+                return;
+              } catch (e4) {
+                addDebugLog('自动补全失败: ' + e4.message);
+              }
+            }
             reject(new Error('返回内容不是有效的JSON格式'));
           }
         },
@@ -2184,14 +2204,25 @@ async function doSearch() {
   let apiErrorMessage = '';
   const apiStartTime = performance.now();
   
-  // 优先使用扣子返回的 products（v2 新结构）
+  // 优先使用扣子返回的 products（v3 精简结构）
   if (aiResult && Array.isArray(aiResult.products) && aiResult.products.length > 0) {
     console.log('[数据源] 使用扣子智能体直接返回的商品数据，共', aiResult.products.length, '条');
-    // 扣子直接返回的 products 已经是 MCP 工具的 list 数组
-    // 把 _raw 字段加上方便后续处理
+    // v3 字段映射：title/cn/cat/img/url/price/priceCny/sales/volume/seller/brand/isFbo/sellerType
     products = aiResult.products.map(item => {
-      const subject = fixRussianEncoding(item.subject || '');
-      const subjectCn = fixRussianEncoding(item.subjectCn || '');
+      const subject = fixRussianEncoding(item.title || item.subject || '');
+      const subjectCn = fixRussianEncoding(item.cn || item.subjectCn || '');
+      const sellerType = item.sellerType !== undefined ? item.sellerType : (item.companyType || 0);
+      const workingMode = item.isFbo ? 'FBO' : (item.workingMode || '');
+      const brand = fixRussianEncoding(item.brand || '');
+      const cat = item.cat || (item.levelName ? fixRussianEncoding(item.levelName).split('>').pop().trim() : '');
+      const price = item.price || 0;
+      const priceCny = item.priceCny || item.priceRmb || 0;
+      const sales = item.sales || item.saleQuantity30d || 0;
+      const volume = item.volume || item.saleVolume30d || 0;
+      const img = item.img || item.image || '';
+      const url = item.url || item.offerUrl || '';
+      const id = item.id || item.offerId || '';
+      
       let relevanceScore = 0;
       let chineseMatch = false;
       let russianMatch = false;
@@ -2211,28 +2242,27 @@ async function doSearch() {
           russianMatch = true;
         }
       }
-      relevanceScore += Math.min(2, Math.log10((item.saleQuantity30d || 0) + 1) / 3);
-      if (item.score) relevanceScore += Math.min(2, item.score / 2.5);
+      relevanceScore += Math.min(2, Math.log10(sales + 1) / 3);
       
       return {
-        id: String(item.offerId || ''),
+        id: String(id),
         title: subject,
         titleCn: subjectCn,
-        price: item.price || 0,
-        priceRmb: item.priceRmb || 0,
-        sales: item.saleQuantity30d || 0,
-        saleVolume30d: item.saleVolume30d || 0,
-        saleVolume30dRate: item.saleVolume30dRate || 0,
-        score: item.score || 0,
-        ratingNum: item.ratingNum || 0,
-        img: item.image || '',
-        link: item.offerUrl || '',
-        category: fixRussianEncoding(item.levelName || ''),
+        price: price,
+        priceRmb: priceCny,
+        sales: sales,
+        saleVolume30d: volume,
+        saleVolume30dRate: 0,
+        score: 0,
+        ratingNum: 0,
+        img: img,
+        link: url,
+        category: cat,
         typeId: String(item.typeId || ''),
-        categoryName: fixRussianEncoding(item.levelName || ''),
-        companyType: item.companyType || 0,
-        workingMode: item.workingMode || '',
-        brand: fixRussianEncoding(item.brand || ''),
+        categoryName: cat,
+        companyType: sellerType,
+        workingMode: workingMode,
+        brand: brand,
         matchedByChinese: chineseMatch,
         matchedByRussian: russianMatch,
         _relevance: relevanceScore,
