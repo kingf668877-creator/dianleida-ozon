@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -665,6 +665,7 @@ body {
 .badge-fbs { background: #F6FFED; color: #52C41A; }
 .badge-hot { background: #FFF1F0; color: #FF4D4F; }
 .badge-cn-match { background: #FEF2F2; color: #DC2626; }
+.badge-ru-match { background: #EFF6FF; color: #1D4ED8; }
 
 /* 分页样式 */
 .pagination {
@@ -1492,6 +1493,15 @@ function processOzonProducts(items, excludedKeywords, requiredKeywords, coreProd
       }
     }
     
+    // 俄语关键词命中加分（俄语关键词仅用于客户端匹配 subject，俄语编码）
+    let russianMatch = false;
+    for (const ruKw of (processOzonProducts._russianKeywords || [])) {
+      if (ruKw && title.includes(ruKw.toLowerCase())) {
+        relevanceScore += 6;
+        russianMatch = true;
+      }
+    }
+    
     const salesScore = Math.min(2, Math.log10((item.saleQuantity30d || 0) + 1) / 3);
     relevanceScore += salesScore;
     
@@ -1517,6 +1527,7 @@ function processOzonProducts(items, excludedKeywords, requiredKeywords, coreProd
       workingMode: item.workingMode || '',
       brand: fixRussianEncoding(item.brand || ''),
       matchedByChinese: chineseMatch,
+      matchedByRussian: russianMatch,
       _relevance: relevanceScore,
       _raw: item
     });
@@ -1546,18 +1557,17 @@ async function fetchProductsFromAPI(keyword, aiResult) {
   
   // 把中文关键词注入 processOzonProducts（用于客户端命中加分）
   processOzonProducts._chineseKeywords = chineseKeywords;
+  // 俄语关键词也用于客户端命中（因为 OZON API 不支持俄文 keyWord 搜索）
+  processOzonProducts._russianKeywords = russianKeywords;
   
-  // 主搜索词：优先用俄语第一个关键词，没有则用英文
-  const mainSearchKeyword = (russianKeywords.length > 0) ? russianKeywords[0] : englishKeyword;
+  // 主搜索词：优先使用英文核心词（OZON API keyWord 现在只支持英文搜索）
+  // 俄语关键词用于客户端匹配 subject（俄语标题）
+  const mainSearchKeyword = englishKeyword;
   
-  // 扩展搜索词：俄语关键词剩余的 + 英文扩展词（精简版，减少 API 调用避免限流）
-  // 中文关键词用于客户端二次过滤（OZON keyWord 不支持中文匹配 subjectCn）
+  // 扩展搜索词：英文扩展词（俄语仅用于客户端匹配，不作为 API 搜索词）
   const extraSearchKeywords = [];
-  if (russianKeywords.length > 1) {
-    extraSearchKeywords.push(...russianKeywords.slice(1, 2));
-  }
   if (expandedKeywords.length > 0) {
-    extraSearchKeywords.push(...expandedKeywords.slice(0, 1));
+    extraSearchKeywords.push(...expandedKeywords.slice(0, 2));
   }
   
   console.log('[搜索策略] 主关键词:', mainSearchKeyword, '扩展词:', extraSearchKeywords);
@@ -2297,6 +2307,7 @@ function renderProducts(products, page) {
       }
     }
     if ((p.sales || 0) > 1000) badges += '<span class="product-badge badge-hot">热销</span>';
+    if (p.matchedByRussian) badges += '<span class="product-badge badge-ru-match">俄语命中</span>';
     if (p.matchedByChinese) badges += '<span class="product-badge badge-cn-match">中文命中</span>';
     
     const priceRub = p.price ? Number(p.price).toLocaleString() : '0';
