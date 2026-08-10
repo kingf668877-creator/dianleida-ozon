@@ -2183,19 +2183,92 @@ async function doSearch() {
   let categoryStats = [];
   let apiErrorMessage = '';
   const apiStartTime = performance.now();
-  try {
-    const result = await fetchProductsFromAPI(query, aiResult);
-    products = result.products || [];
-    categoryStats = result.categoryStats || [];
-  } catch (e) {
-    console.warn('API调用失败:', e.message);
-    apiErrorMessage = e.message || '未知错误';
-  } finally {
-    window._lastApiError = apiErrorMessage;
-    apiDuration = performance.now() - apiStartTime;
-    console.log('[耗时统计] OZON API:', formatDuration(apiDuration));
-    updateTimingDisplay({ agent: agentDuration, api: apiDuration, total: performance.now() - totalStartTime });
+  
+  // 优先使用扣子返回的 products（v2 新结构）
+  if (aiResult && Array.isArray(aiResult.products) && aiResult.products.length > 0) {
+    console.log('[数据源] 使用扣子智能体直接返回的商品数据，共', aiResult.products.length, '条');
+    // 扣子直接返回的 products 已经是 MCP 工具的 list 数组
+    // 把 _raw 字段加上方便后续处理
+    products = aiResult.products.map(item => {
+      const subject = fixRussianEncoding(item.subject || '');
+      const subjectCn = fixRussianEncoding(item.subjectCn || '');
+      let relevanceScore = 0;
+      let chineseMatch = false;
+      let russianMatch = false;
+      const core = (aiResult.coreProduct || '').toLowerCase();
+      if (core && (subject.toLowerCase().includes(core) || subjectCn.toLowerCase().includes(core))) relevanceScore += 10;
+      // 中文关键词命中加分
+      for (const cnKw of (aiResult.chineseKeywords || [])) {
+        if (cnKw && subjectCn.toLowerCase().includes(cnKw.toLowerCase())) {
+          relevanceScore += 8;
+          chineseMatch = true;
+        }
+      }
+      // 俄语关键词命中加分
+      for (const ruKw of (aiResult.russianKeywords || [])) {
+        if (ruKw && subject.toLowerCase().includes(ruKw.toLowerCase())) {
+          relevanceScore += 6;
+          russianMatch = true;
+        }
+      }
+      relevanceScore += Math.min(2, Math.log10((item.saleQuantity30d || 0) + 1) / 3);
+      if (item.score) relevanceScore += Math.min(2, item.score / 2.5);
+      
+      return {
+        id: String(item.offerId || ''),
+        title: subject,
+        titleCn: subjectCn,
+        price: item.price || 0,
+        priceRmb: item.priceRmb || 0,
+        sales: item.saleQuantity30d || 0,
+        saleVolume30d: item.saleVolume30d || 0,
+        saleVolume30dRate: item.saleVolume30dRate || 0,
+        score: item.score || 0,
+        ratingNum: item.ratingNum || 0,
+        img: item.image || '',
+        link: item.offerUrl || '',
+        category: fixRussianEncoding(item.levelName || ''),
+        typeId: String(item.typeId || ''),
+        categoryName: fixRussianEncoding(item.levelName || ''),
+        companyType: item.companyType || 0,
+        workingMode: item.workingMode || '',
+        brand: fixRussianEncoding(item.brand || ''),
+        matchedByChinese: chineseMatch,
+        matchedByRussian: russianMatch,
+        _relevance: relevanceScore,
+        _raw: item
+      };
+    });
+    
+    // 统计类目分布
+    const catMap = {};
+    products.forEach(p => {
+      const cat = (p.categoryName || '').split('>').pop().trim();
+      if (cat) {
+        catMap[cat] = (catMap[cat] || 0) + 1;
+      }
+    });
+    const total = products.length;
+    categoryStats = Object.entries(catMap)
+      .map(([name, count]) => ({ id: name, name, count, ratio: Math.round((count / total) * 100) }))
+      .sort((a, b) => b.count - a.count);
+    
+  } else {
+    // fallback: 前端自己调用 MCP API
+    console.log('[数据源] 扣子未返回商品数据，使用前端 MCP API 调用');
+    try {
+      const result = await fetchProductsFromAPI(query, aiResult);
+      products = result.products || [];
+      categoryStats = result.categoryStats || [];
+    } catch (e) {
+      console.warn('API调用失败:', e.message);
+      apiErrorMessage = e.message || '未知错误';
+    }
   }
+  window._lastApiError = apiErrorMessage;
+  apiDuration = performance.now() - apiStartTime;
+  console.log('[耗时统计] OZON API:', formatDuration(apiDuration));
+  updateTimingDisplay({ agent: agentDuration, api: apiDuration, total: performance.now() - totalStartTime });
   
   // 更新 Step 3: 类目分布分析结果
   if (categoryStats.length > 0) {
@@ -2214,9 +2287,11 @@ async function doSearch() {
     const searchWords = russianKeywords.slice(0, 2);
     if (expanded.length > 0) searchWords.push(...expanded.slice(0, 2));
     const displaySearch = searchWords.join('、');
+    const isFromCoze = aiResult && Array.isArray(aiResult.products) && aiResult.products.length > 0;
+    const sourceLabel = isFromCoze ? '智能体调用API' : '实时API';
     updateStep(step4, '✅', 'Step 4: OZON商品搜索完成', 
       '搜索词：' + displaySearch + ' · 从OZON实时获取 ' + products.length + ' 条商品数据',
-      ['实时API', products.length + '件商品']
+      [sourceLabel, products.length + '件商品']
     );
   } else {
     let errDetail = '请稍后重试或更换关键词';
