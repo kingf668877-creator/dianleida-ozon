@@ -879,7 +879,7 @@ body {
     </div>
     <div class="filter-row">
       <span class="filter-label">排序：</span>
-      <div class="chip-group" id="sort-filter">
+      <div id="category-chip-row" style="display:none;margin:8px 0;"></div>`r`n      <div class="chip-group" id="sort-filter">
         <span class="chip active" data-sort="score">综合相关</span>
         <span class="chip" data-sort="sales">30天销量</span>
         <span class="chip" data-sort="revenue">30天销售额</span>
@@ -980,6 +980,8 @@ async function callOzonSearch(bizParams) {
 // ===== 扣子智能体配置 =====
 const USE_COZE_AGENT = true;
 const COZE_BOT_ID = '7665184702596169782';
+const COZE_CATEGORY_BOT_ID = '7672668826404290603';
+const COZE_API_TOKEN = 'sat_M2oVUcRcmShLQVJuvMdLm7K7DSxC9KvvuZI8Yj9eqt4uSvelfMmeMsYSGqveGK1m';
 const COZE_API_TOKEN = 'sat_M2oVUcRcmShLQVJuvMdLm7K7DSxC9KvvuZI8Yj9eqt4uSvelfMmeMsYSGqveGK1m';
 const COZE_API_URL = 'https://api.coze.cn/v3/chat';
 // ===== 调用扣子智能体API（流式）=====
@@ -1273,6 +1275,109 @@ function extractJSON(text) {
   }
   return null;
 }
+
+// ===== 类目智能体：返回 categoryTree =====
+const CATEGORY_BOT_TIMEOUT_MS = 25000;
+async function callCozeCategoryBot(query) {
+  if (!USE_COZE_AGENT || !COZE_API_TOKEN || !COZE_CATEGORY_BOT_ID) return [];
+  try {
+    const result = await callCozeBot(COZE_CATEGORY_BOT_ID, query, null);
+    if (!result || typeof result !== 'object') return [];
+    const tree = Array.isArray(result.categoryTree) ? result.categoryTree : [];
+    return tree.map(item => ({
+      id: String(item.category_id || item.categoryId || '),
+      name: String(item.category_name || item.categoryName || item.name || ').trim()
+    })).filter(item => item.id && item.name).slice(0, 8);
+  } catch (e) {
+    console.warn('[CategoryBot] 调用失败:', e.message);
+    return [];
+  }
+}
+
+// ===== 类目筛选状态 =====
+let currentCategoryTree = [];
+let excludedCategoryIds = new Set();
+let activeCategorySearch = false;
+
+function getActiveCategoryIdList() {
+  return currentCategoryTree.filter(c => !excludedCategoryIds.has(c.id)).map(c => c.id);
+}
+
+function renderCategoryChips() {
+  const container = document.getElementById('category-chip-row');
+  if (!container) return;
+  if (!currentCategoryTree || currentCategoryTree.length === 0) {
+    container.innerHTML = '';
+    container.style.display = 'none';
+    return;
+  }
+  container.style.display = 'block';
+  const activeCount = getActiveCategoryIdList().length;
+  const chips = currentCategoryTree.map(cat => {
+    const active = !excludedCategoryIds.has(cat.id);
+    const cls = active ? 'chip active' : 'chip';
+    return `<span class="${cls}" data-cat-id="${escapeHtml(cat.id)}" onclick="toggleCategory('${escapeHtml(cat.id).replace(/\"/g, '&quot;')}')">${escapeHtml(cat.name)}</span>`;
+  }).join('');
+  const summary = activeCount === currentCategoryTree.length
+    ? `已应用 ${activeCount} 个类目筛选（点击 chip 可取消）`
+    : `已应用 ${activeCount}/${currentCategoryTree.length} 个类目`;
+  container.innerHTML = `<div style="margin:8px 0 4px;color:#666;font-size:13px;">🎯 类目筛选 · ${summary} <span class="chip" style="margin-left:8px;" onclick="restoreAllCategories()">恢复全部</span></div><div class="chip-group">${chips}</div>`;
+}
+
+async function toggleCategory(catId) {
+  if (!catId) return;
+  if (excludedCategoryIds.has(catId)) excludedCategoryIds.delete(catId);
+  else excludedCategoryIds.add(catId);
+  renderCategoryChips();
+  if (activeCategorySearch) return;
+  activeCategorySearch = true;
+  try {
+    await rerunSearchWithCategories();
+  } finally {
+    activeCategorySearch = false;
+  }
+}
+
+async function restoreAllCategories() {
+  if (excludedCategoryIds.size === 0) return;
+  excludedCategoryIds.clear();
+  renderCategoryChips();
+  if (activeCategorySearch) return;
+  activeCategorySearch = true;
+  try {
+    await rerunSearchWithCategories();
+  } finally {
+    activeCategorySearch = false;
+  }
+}
+
+async function rerunSearchWithCategories() {
+  const aiResult = window.__lastAiResult || null;
+  const query = (document.getElementById('search-input') || {}).value || '';
+  if (!query) return;
+  const categoryIdList = getActiveCategoryIdList();
+  try {
+    const result = await fetchProductsFromAPI(query, aiResult, { categoryIdList });
+    if (result && Array.isArray(result.products) && result.products.length > 0) {
+      currentResults = result.products;
+      renderProducts(result.products);
+      window._lastApiError = '';
+    } else {
+      showCategoryEmptyHint();
+    }
+  } catch (e) {
+    console.warn('[Category] 重搜失败:', e.message);
+  }
+}
+
+function showCategoryEmptyHint() {
+  const grid = document.getElementById('product-grid');
+  if (!grid) return;
+  grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px;color:#999;">该筛选下暂无结果，请取消部分类目或点击“恢复全部”</div>';
+  currentResults = [];
+  document.getElementById('products-count').textContent = '0 件';
+}
+
 // ===== 调用单个智能体 =====
 async function callCozeSearchAnalysis(query, onStreamDelta) {
   if (!USE_COZE_AGENT || !COZE_API_TOKEN) return { result: null, agentTime: 0 };
@@ -1390,8 +1495,8 @@ function processOzonProducts(items, excludedKeywords, requiredKeywords, coreProd
   return result;
 }
 // ===== 从OZON MCP获取商品 =====
-async function fetchProductsFromAPI(keyword, aiResult) {
-  const allProducts = [];
+async function fetchProductsFromAPI(keyword, aiResult, options) {
+  const allProducts = [];`r`n  const opts = options || {};`r`n  const categoryIdList = Array.isArray(opts.categoryIdList) && opts.categoryIdList.length > 0 ? opts.categoryIdList : null;
   const seenIds = new Set();
   
   const englishKeyword = (aiResult && aiResult.searchKeyword) || keyword;
@@ -1415,13 +1520,15 @@ async function fetchProductsFromAPI(keyword, aiResult) {
   console.log('[搜索策略] 主关键词:', mainSearchKeyword, '扩展词:', extraSearchKeywords);
   // 用一个关键词搜索一次：只调用官方 REST 接口 /api/v1/ozon/search
   // searchType=3 精准匹配
-  async function trySearchOneSource(keyWord, pageSize) {
-    const result = await callOzonSearch({
+  async function trySearchOneSource(keyWord, pageSize, catIds) {
+    const bizParams = {
       pageIndex: 1,
       pageSize: pageSize,
       keyWord: keyWord,
       searchType: 3
-    });
+    };
+    if (catIds && catIds.length > 0) bizParams.categoryIdList = catIds;
+    const result = await callOzonSearch(bizParams);
     if (!result || !result.list || result.list.length === 0) {
       throw new Error('官方接口返回空列表');
     }
@@ -1429,7 +1536,7 @@ async function fetchProductsFromAPI(keyword, aiResult) {
   }
   // 第一轮：主关键词搜索
   try {
-    const searchResult = await trySearchOneSource(mainSearchKeyword, 50);
+    const searchResult = await trySearchOneSource(mainSearchKeyword, 50, categoryIdList);
     console.log('[搜索数据源] ' + searchResult.source);
     window._debugRaw = 'mainSearchKeyword=' + mainSearchKeyword + ', rawListCount=' + (searchResult.list ? searchResult.list.length : 0);
     if (searchResult && searchResult.list && Array.isArray(searchResult.list)) {
