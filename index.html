@@ -879,7 +879,8 @@ body {
     </div>
     <div class="filter-row">
       <span class="filter-label">排序：</span>
-      <div id="category-chip-row" style="display:none;margin:8px 0;"></div>`r`n      <div class="chip-group" id="sort-filter">
+      <div id="category-chip-row" style="display:none;margin:8px 0;"></div>
+      <div class="chip-group" id="sort-filter">
         <span class="chip active" data-sort="score">综合相关</span>
         <span class="chip" data-sort="sales">30天销量</span>
         <span class="chip" data-sort="revenue">30天销售额</span>
@@ -1496,7 +1497,9 @@ function processOzonProducts(items, excludedKeywords, requiredKeywords, coreProd
 }
 // ===== 从OZON MCP获取商品 =====
 async function fetchProductsFromAPI(keyword, aiResult, options) {
-  const allProducts = [];`r`n  const opts = options || {};`r`n  const categoryIdList = Array.isArray(opts.categoryIdList) && opts.categoryIdList.length > 0 ? opts.categoryIdList : null;
+  const allProducts = [];
+  const opts = options || {};
+  const categoryIdList = Array.isArray(opts.categoryIdList) && opts.categoryIdList.length > 0 ? opts.categoryIdList : null;
   const seenIds = new Set();
   
   const englishKeyword = (aiResult && aiResult.searchKeyword) || keyword;
