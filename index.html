@@ -1278,17 +1278,18 @@ function extractJSON(text) {
 }
 
 // ===== 类目智能体：返回 categoryTree =====
-const CATEGORY_BOT_TIMEOUT_MS = 25000;
 async function callCozeCategoryBot(query) {
   if (!USE_COZE_AGENT || !COZE_API_TOKEN || !COZE_CATEGORY_BOT_ID) return [];
   try {
     const result = await callCozeBot(COZE_CATEGORY_BOT_ID, query, null);
     if (!result || typeof result !== 'object') return [];
     const tree = Array.isArray(result.categoryTree) ? result.categoryTree : [];
-    return tree.map(item => ({
-      id: String(item.category_id || item.categoryId || '),
-      name: String(item.category_name || item.categoryName || item.name || ').trim()
-    })).filter(item => item.id && item.name).slice(0, 8);
+    return tree.map(function (item) {
+      return {
+        id: String(item.category_id || item.categoryId || ''),
+        name: String(item.category_name || item.categoryName || item.name || '').trim()
+      };
+    }).filter(function (item) { return item.id && item.name; }).slice(0, 8);
   } catch (e) {
     console.warn('[CategoryBot] 调用失败:', e.message);
     return [];
@@ -1296,16 +1297,16 @@ async function callCozeCategoryBot(query) {
 }
 
 // ===== 类目筛选状态 =====
-let currentCategoryTree = [];
-let excludedCategoryIds = new Set();
-let activeCategorySearch = false;
+var currentCategoryTree = [];
+var excludedCategoryIds = new Set();
+var activeCategorySearch = false;
 
 function getActiveCategoryIdList() {
-  return currentCategoryTree.filter(c => !excludedCategoryIds.has(c.id)).map(c => c.id);
+  return currentCategoryTree.filter(function (c) { return !excludedCategoryIds.has(c.id); }).map(function (c) { return c.id; });
 }
 
 function renderCategoryChips() {
-  const container = document.getElementById('category-chip-row');
+  var container = document.getElementById('category-chip-row');
   if (!container) return;
   if (!currentCategoryTree || currentCategoryTree.length === 0) {
     container.innerHTML = '';
@@ -1313,16 +1314,18 @@ function renderCategoryChips() {
     return;
   }
   container.style.display = 'block';
-  const activeCount = getActiveCategoryIdList().length;
-  const chips = currentCategoryTree.map(cat => {
-    const active = !excludedCategoryIds.has(cat.id);
-    const cls = active ? 'chip active' : 'chip';
-    return `<span class="${cls}" data-cat-id="${escapeHtml(cat.id)}" onclick="toggleCategory('${escapeHtml(cat.id).replace(/\"/g, '&quot;')}')">${escapeHtml(cat.name)}</span>`;
+  var activeCount = getActiveCategoryIdList().length;
+  var chips = currentCategoryTree.map(function (cat) {
+    var active = !excludedCategoryIds.has(cat.id);
+    var cls = active ? 'chip active' : 'chip';
+    var safeName = escapeHtml(cat.name);
+    var safeId = String(cat.id).replace(/'/g, '&apos;');
+    return '<span class="' + cls + '" data-cat-id="' + escapeHtml(cat.id) + '" onclick="toggleCategory(\'' + safeId + '\')">' + safeName + '</span>';
   }).join('');
-  const summary = activeCount === currentCategoryTree.length
-    ? `已应用 ${activeCount} 个类目筛选（点击 chip 可取消）`
-    : `已应用 ${activeCount}/${currentCategoryTree.length} 个类目`;
-  container.innerHTML = `<div style="margin:8px 0 4px;color:#666;font-size:13px;">🎯 类目筛选 · ${summary} <span class="chip" style="margin-left:8px;" onclick="restoreAllCategories()">恢复全部</span></div><div class="chip-group">${chips}</div>`;
+  var summary = activeCount === currentCategoryTree.length
+    ? '已应用 ' + activeCount + ' 个类目筛选（点击 chip 可取消）'
+    : '已应用 ' + activeCount + '/' + currentCategoryTree.length + ' 个类目';
+  container.innerHTML = '<div style="margin:8px 0 4px;color:#666;font-size:13px;">🎯 类目筛选 · ' + summary + ' <span class="chip" style="margin-left:8px;" onclick="restoreAllCategories()">恢复全部</span></div><div class="chip-group">' + chips + '</div>';
 }
 
 async function toggleCategory(catId) {
@@ -1353,12 +1356,12 @@ async function restoreAllCategories() {
 }
 
 async function rerunSearchWithCategories() {
-  const aiResult = window.__lastAiResult || null;
-  const query = (document.getElementById('search-input') || {}).value || '';
+  var aiResult = window.__lastAiResult || null;
+  var query = (document.getElementById('search-input') || {}).value || '';
   if (!query) return;
-  const categoryIdList = getActiveCategoryIdList();
+  var categoryIdList = getActiveCategoryIdList();
   try {
-    const result = await fetchProductsFromAPI(query, aiResult, { categoryIdList });
+    var result = await fetchProductsFromAPI(query, aiResult, { categoryIdList: categoryIdList });
     if (result && Array.isArray(result.products) && result.products.length > 0) {
       currentResults = result.products;
       renderProducts(result.products);
@@ -1372,15 +1375,13 @@ async function rerunSearchWithCategories() {
 }
 
 function showCategoryEmptyHint() {
-  const grid = document.getElementById('product-grid');
+  var grid = document.getElementById('product-grid');
   if (!grid) return;
   grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px;color:#999;">该筛选下暂无结果，请取消部分类目或点击“恢复全部”</div>';
   currentResults = [];
   document.getElementById('products-count').textContent = '0 件';
 }
-
-// ===== 调用单个智能体 =====
-async function callCozeSearchAnalysis(query, onStreamDelta) {
+function callCozeSearchAnalysis(query, onStreamDelta) {
   if (!USE_COZE_AGENT || !COZE_API_TOKEN) return { result: null, agentTime: 0 };
   
   COZE_DEBUG_LOG = [];
