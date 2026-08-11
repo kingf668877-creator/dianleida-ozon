@@ -1954,7 +1954,7 @@ async function doSearch() {
     }
   }
   // ===== Step 2: 关键词扩展分析（渐变流式展示）=====
-  await new Promise(r => setTimeout(r, 300));
+  await (async function(){ await new Promise(r => setTimeout(r, 300)); })();
   const expanded = aiResult.expandedKeywords || [];
   const excluded = aiResult.excludedKeywords || [];
   const russianKeywords = aiResult.russianKeywords || [];
@@ -2143,7 +2143,7 @@ async function doSearch() {
     }
   }
   // ===== Step 3: 类目分布分析（搜索后统计）=====
-  await new Promise(r => setTimeout(r, 250));
+  (await (async function(){ await new Promise(r => setTimeout(r, 250)); })())
   const step3 = addLoadingStep('📊', 'Step 3: 类目分布分析中...', '搜索完成后将展示类目分布...');
   
   // ===== Step 4: 调用OZON MCP获取商品 =====
