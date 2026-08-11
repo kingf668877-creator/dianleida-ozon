@@ -10,21 +10,17 @@ function escapeHtml(s) {
   if (!s) return '';
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
-
 // ===== 文本编码修复：仅修复高置信度 Latin-1/UTF-8 乱码 =====
 function fixRussianEncoding(str) {
   if (!str || typeof str !== 'string') return str;
-
   function mojibakeScore(value) {
     const replacementChars = (value.match(/\uFFFD/g) || []).length;
     const controlChars = (value.match(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g) || []).length;
     const mojibakeMarkers = (value.match(/[ÃÂÐÑРС]/g) || []).length;
     return replacementChars * 12 + controlChars * 8 + mojibakeMarkers * 2;
   }
-
   const originalScore = mojibakeScore(str);
   if (originalScore === 0) return str;
-
   try {
     const bytes = new Uint8Array(str.length);
     for (let i = 0; i < str.length; i++) {
@@ -32,7 +28,6 @@ function fixRussianEncoding(str) {
       if (code > 0xFF) return str;
       bytes[i] = code;
     }
-
     const decoded = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
     return mojibakeScore(decoded) < originalScore ? decoded : str;
   } catch (e) {
@@ -48,7 +43,6 @@ body {
   color: #333;
   min-height: 100vh;
 }
-
 /* ===== Hero Section ===== */
 .hero-section {
   text-align: center;
@@ -79,7 +73,6 @@ body {
   margin-bottom: 48px;
   position: relative;
 }
-
 /* ===== Search Box ===== */
 .search-box-container {
   max-width: 880px;
@@ -157,7 +150,6 @@ body {
 }
 .search-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(99,102,241,0.4); }
 .search-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
-
 /* ===== Tip Banner ===== */
 .tip-banner {
   max-width: 880px;
@@ -173,7 +165,6 @@ body {
 }
 .tip-banner-left { display: flex; align-items: center; gap: 6px; }
 .tip-banner-right { display: flex; align-items: center; gap: 6px; cursor: pointer; font-weight: 500; }
-
 /* 历史搜索词 */
 .search-history {
   max-width: 880px;
@@ -233,7 +224,6 @@ body {
   transform: translateY(-1px);
   box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
 }
-
 /* ===== Quick Tools ===== */
 .quick-tools {
   max-width: 880px;
@@ -275,7 +265,6 @@ body {
   border-radius: 8px;
   font-weight: 500;
 }
-
 /* ===== Results Section ===== */
 .results-section {
   max-width: 1200px;
@@ -284,7 +273,6 @@ body {
   display: none;
 }
 .results-section.active { display: block; }
-
 /* Analysis Card - 新版样式 */
 .analysis-card {
   background: linear-gradient(135deg, #F5F3FF 0%, #EDE9FE 100%);
@@ -332,7 +320,6 @@ body {
   border: 1px solid rgba(124,58,237,0.14);
 }
 .timing-chip strong { font-weight: 700; color: #4C1D95; }
-
 /* Step 2 渐变分析过程展示 */
 .step-analysis-box {
   margin-top: 12px;
@@ -365,7 +352,6 @@ body {
 @keyframes fadeSlideIn {
   to { opacity: 1; transform: translateX(0); }
 }
-
 /* Steps */
 .ai-steps { display: flex; flex-direction: column; gap: 10px; }
 .ai-step {
@@ -430,7 +416,6 @@ body {
 @keyframes fadeSlideUp {
   to { opacity: 1; transform: translateY(0); }
 }
-
 /* 俄语关键词特殊展示 */
 .russian-keywords-box {
   margin-top: 12px;
@@ -472,7 +457,6 @@ body {
   font-size: 11px;
   font-weight: 400;
 }
-
 /* 中文关键词展示 */
 .chinese-keywords-box {
   margin-top: 12px;
@@ -527,7 +511,6 @@ body {
 }
 .copy-btn:hover { background: #2563EB; }
 .copy-btn.copied { background: #10B981; }
-
 /* 英文搜索词展示 */
 .english-keywords-box {
   margin-top: 10px;
@@ -551,7 +534,6 @@ body {
   font-size: 12px;
   color: #7C3AED;
 }
-
 /* Products */
 .products-header {
   display: flex;
@@ -577,7 +559,6 @@ body {
 }
 .chip:hover { background: #eee; }
 .chip.active { background: #6366F1; color: #fff; }
-
 .product-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
@@ -678,7 +659,6 @@ body {
 .badge-hot { background: #FFF1F0; color: #FF4D4F; }
 .badge-cn-match { background: #FEF2F2; color: #DC2626; }
 .badge-ru-match { background: #EFF6FF; color: #1D4ED8; }
-
 /* 分页样式 */
 .pagination {
   display: flex;
@@ -772,7 +752,6 @@ body {
   padding: 6px 12px;
   font-size: 13px;
 }
-
 /* Loading */
 .loading-dots {
   display: inline-flex;
@@ -791,7 +770,6 @@ body {
   0%, 80%, 100% { transform: scale(0); }
   40% { transform: scale(1); }
 }
-
 /* Responsive */
 @media (max-width: 768px) {
   .hero-title { font-size: 28px; }
@@ -804,12 +782,10 @@ body {
 <script src="https://cdn.jsdelivr.net/npm/blueimp-md5@2.19.0/js/md5.min.js"></script>
 </head>
 <body>
-
 <!-- Hero Section -->
 <div class="hero-section">
   <h1 class="hero-title">店雷达 OZON 选品助手</h1>
   <p class="hero-subtitle">俄罗斯电商选品 · 数据分析 · 市场调研</p>
-
   <div class="search-box-container">
     <div class="search-box">
       <textarea 
@@ -850,7 +826,6 @@ body {
       <div class="search-history-tags" id="search-history-tags"></div>
     </div>
   </div>
-
   <!-- Quick Tools -->
   <div class="quick-tools">
     <div class="tool-item" onclick="quickSearch('dress', '连衣裙选品')">
@@ -876,7 +851,6 @@ body {
     </div>
   </div>
 </div>
-
 <!-- Results Section -->
 <div class="results-section" id="results-section">
   <!-- Analysis Card -->
@@ -898,7 +872,6 @@ body {
       <!-- Steps will be added dynamically -->
     </div>
   </div>
-
   <!-- Products -->
   <div class="products-header">
     <div class="products-title">
@@ -920,7 +893,6 @@ body {
   <div class="product-grid" id="product-grid">
     <div style="grid-column:1/-1;text-align:center;padding:60px;color:#999;">正在搜索商品...</div>
   </div>
-
   <!-- 分页组件 -->
   <div class="pagination" id="pagination" style="display:none;">
     <button class="page-btn" id="prev-btn" onclick="changePage(-1)">上一页</button>
@@ -933,7 +905,6 @@ body {
     </div>
   </div>
 </div>
-
 <script>
 // ===== 店雷达官方开放 REST 接口配置 =====
 // 按官方文档《店雷达接入说明》，对接 OZON 选品库接口：
@@ -945,7 +916,6 @@ const OPEN_API_BASE = 'https://open.dianleida.net';
 const OZON_SEARCH_PATH = '/api/v1/ozon/search';
 const APP_ID = '56a337d738712dd3';
 const APP_SECRET = '3d24d39a56a337d738712dd32ca4f899';
-
 // ===== MD5 签名生成（使用 blueimp-md5 CDN 库） =====
 // window.md5 由 blueimp-md5 库提供
 function generateNonceStr() {
@@ -956,7 +926,6 @@ function generateNonceStr() {
   }
   return Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
 }
-
 function buildSign(params, appSecret) {
   // 1. 除 sign 外按 key 字典排序，空值不参与签名
   const sortedKeys = Object.keys(params).filter(k => k !== 'sign' && params[k] !== '' && params[k] !== null && params[k] !== undefined).sort();
@@ -966,7 +935,6 @@ function buildSign(params, appSecret) {
   // 3. MD5 小写
   return md5(signStr);
 }
-
 // ===== 调用店雷达官方开放 REST 接口（ozon/search） =====
 // POST https://open.dianleida.net/api/v1/ozon/search
 // 鉴权方式：appId + nonceStr + sign 放在请求体中
@@ -1009,13 +977,11 @@ async function callOzonSearch(bizParams) {
   }
   throw new Error('官方接口错误: code=' + (data && data.code) + ', msg=' + (data && data.msg));
 }
-
 // ===== 扣子智能体配置 =====
 const USE_COZE_AGENT = true;
 const COZE_BOT_ID = '7665184702596169782';
 const COZE_API_TOKEN = 'sat_M2oVUcRcmShLQVJuvMdLm7K7DSxC9KvvuZI8Yj9eqt4uSvelfMmeMsYSGqveGK1m';
 const COZE_API_URL = 'https://api.coze.cn/v3/chat';
-
 // ===== 调用扣子智能体API（流式）=====
 let COZE_DEBUG_LOG = [];
 function addDebugLog(msg) {
@@ -1024,7 +990,6 @@ function addDebugLog(msg) {
   if (COZE_DEBUG_LOG.length > 50) COZE_DEBUG_LOG.shift();
   console.log('[Coze Debug]', msg);
 }
-
 // 流式解析SSE响应
 function parseSSE(response, onMessage, onComplete, onError) {
   const reader = response.body.getReader();
@@ -1073,7 +1038,6 @@ function parseSSE(response, onMessage, onComplete, onError) {
   
   read();
 }
-
 async function callCozeBot(botId, query, onStreamDelta) {
   if (!USE_COZE_AGENT || !COZE_API_TOKEN || !botId) return null;
   
@@ -1296,7 +1260,6 @@ async function callCozeBot(botId, query, onStreamDelta) {
     return null;
   }
 }
-
 function extractJSON(text) {
   if (!text) return null;
   try { return JSON.parse(text); } catch(e) {}
@@ -1310,7 +1273,6 @@ function extractJSON(text) {
   }
   return null;
 }
-
 // ===== 调用单个智能体 =====
 async function callCozeSearchAnalysis(query, onStreamDelta) {
   if (!USE_COZE_AGENT || !COZE_API_TOKEN) return { result: null, agentTime: 0 };
@@ -1331,9 +1293,6 @@ async function callCozeSearchAnalysis(query, onStreamDelta) {
     return { result: null, agentTime: performance.now() - agentStart };
   }
 }
-
-
-
 // ===== 处理OZON商品数据 =====
 function processOzonProducts(items, excludedKeywords, requiredKeywords, coreProduct) {
   const result = [];
@@ -1430,7 +1389,6 @@ function processOzonProducts(items, excludedKeywords, requiredKeywords, coreProd
   
   return result;
 }
-
 // ===== 从OZON MCP获取商品 =====
 async function fetchProductsFromAPI(keyword, aiResult) {
   const allProducts = [];
@@ -1443,23 +1401,18 @@ async function fetchProductsFromAPI(keyword, aiResult) {
   const excludedKeywords = (aiResult && aiResult.excludedKeywords) || [];
   const requiredKeywords = (aiResult && aiResult.requiredKeywords) || [];
   const coreProduct = (aiResult && aiResult.coreProduct) || keyword;
-
   // 把中文关键词注入 processOzonProducts（用于客户端命中加分）
   processOzonProducts._chineseKeywords = chineseKeywords;
   // 俄语关键词也用于客户端命中（因为 OZON API 不支持俄文 keyWord 搜索）
   processOzonProducts._russianKeywords = russianKeywords;
-
   // 主搜索词：优先使用用户输入 query，其次 aiResult.searchKeyword，最后 englishKeyword
   const mainSearchKeyword = (keyword && String(keyword).trim()) || englishKeyword;
-
   // 扩展搜索词：英文扩展词
   const extraSearchKeywords = [];
   if (expandedKeywords.length > 0) {
     extraSearchKeywords.push(...expandedKeywords.slice(0, 2));
   }
-
   console.log('[搜索策略] 主关键词:', mainSearchKeyword, '扩展词:', extraSearchKeywords);
-
   // 用一个关键词搜索一次：只调用官方 REST 接口 /api/v1/ozon/search
   // searchType=3 精准匹配
   async function trySearchOneSource(keyWord, pageSize) {
@@ -1474,7 +1427,6 @@ async function fetchProductsFromAPI(keyword, aiResult) {
     }
     return { list: result.list, source: 'open' };
   }
-
   // 第一轮：主关键词搜索
   try {
     const searchResult = await trySearchOneSource(mainSearchKeyword, 50);
@@ -1500,7 +1452,6 @@ async function fetchProductsFromAPI(keyword, aiResult) {
     console.warn('第一轮搜索失败 [' + mainSearchKeyword + ']:', e.message);
     window._debugRaw = 'mainSearch FAILED: ' + e.message;
   }
-
   // 第二轮：扩展词搜索（不加类目过滤，最多 2 个扩展词）
   if (extraSearchKeywords.length > 0 && allProducts.length < 60) {
     const expandWords = extraSearchKeywords.slice(0, 2);
@@ -1527,7 +1478,6 @@ async function fetchProductsFromAPI(keyword, aiResult) {
       }
     }
   }
-
   // 兜底：如果结果太少，用俄语关键词试试（俄语是 OZON 商品的原语种，匹配更精准）
   if (allProducts.length < 5 && russianKeywords && russianKeywords.length > 0) {
     for (const ruWord of russianKeywords.slice(0, 2)) {
@@ -1553,7 +1503,6 @@ async function fetchProductsFromAPI(keyword, aiResult) {
       }
     }
   }
-
   // 第二兜底：用中文关键词再试（中文 keyWord 在 MCP 上能用，已实测可搜到 2000 条结果）
   if (allProducts.length < 5 && chineseKeywords && chineseKeywords.length > 0) {
     for (const cnWord of chineseKeywords.slice(0, 1)) {
@@ -1579,7 +1528,6 @@ async function fetchProductsFromAPI(keyword, aiResult) {
       }
     }
   }
-
   // 终极兜底：直接用原始 query 强制重试（如果以上三轮都失败）
   if (allProducts.length === 0 && keyword && String(keyword).trim()) {
     console.log('[终极兜底] 用原始 query 重试:', keyword);
@@ -1636,23 +1584,19 @@ async function fetchProductsFromAPI(keyword, aiResult) {
     totalCount: allProducts.length
   };
 }
-
 // ===== 状态 =====
 let currentResults = [];
 let isSearching = false;
 let currentPage = 1;
 const PAGE_SIZE = 24;
-
 // ===== 搜索历史功能 =====
 const HISTORY_KEY = 'dianleida_ozon_history';
 const HISTORY_MAX = 10;
-
 function getSearchHistory() {
   try {
     return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
   } catch(e) { return []; }
 }
-
 function saveSearchHistory(keyword) {
   let history = getSearchHistory();
   history = history.filter(item => item !== keyword);
@@ -1661,7 +1605,6 @@ function saveSearchHistory(keyword) {
   localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
   renderSearchHistory();
 }
-
 function renderSearchHistory() {
   const history = getSearchHistory();
   const container = document.getElementById('search-history');
@@ -1676,20 +1619,16 @@ function renderSearchHistory() {
     return '<span class="history-tag" onclick="clickHistoryTag(\'' + safeKw + '\')">' + escapeHtml(kw) + '</span>';
   }).join('');
 }
-
 function clickHistoryTag(keyword) {
   document.getElementById('search-input').value = keyword;
   doSearch();
 }
-
 function clearSearchHistory() {
   localStorage.removeItem(HISTORY_KEY);
   renderSearchHistory();
 }
-
 // 页面加载时渲染历史
 renderSearchHistory();
-
 // ===== 添加分析步骤 =====
 function addStep(icon, title, detail, tokens) {
   const stepsContainer = document.getElementById('ai-steps');
@@ -1709,7 +1648,6 @@ function addStep(icon, title, detail, tokens) {
   stepsContainer.appendChild(stepEl);
   return stepEl;
 }
-
 function addLoadingStep(icon, title, detail) {
   const stepsContainer = document.getElementById('ai-steps');
   const stepEl = document.createElement('div');
@@ -1723,13 +1661,11 @@ function addLoadingStep(icon, title, detail) {
   stepsContainer.appendChild(stepEl);
   return stepEl;
 }
-
 function formatDuration(ms) {
   if (ms === null || ms === undefined || Number.isNaN(ms)) return '--';
   if (ms < 1000) return Math.round(ms) + 'ms';
   return (ms / 1000).toFixed(2) + 's';
 }
-
 function updateTimingDisplay(timing) {
   const timingEl = document.getElementById('analysis-timing');
   if (!timingEl) return;
@@ -1743,7 +1679,6 @@ function updateTimingDisplay(timing) {
   if (apiEl && timing.api !== undefined) apiEl.textContent = formatDuration(timing.api);
   if (totalEl && timing.total !== undefined) totalEl.textContent = formatDuration(timing.total);
 }
-
 function updateStep(stepEl, icon, title, detail, tokens) {
   let tokensHtml = '';
   if (tokens && tokens.length > 0) {
@@ -1758,24 +1693,19 @@ function updateStep(stepEl, icon, title, detail, tokens) {
       ${tokensHtml}
     </div>`;
 }
-
 // ===== 搜索主函数 =====
 async function doSearch() {
   const query = document.getElementById('search-input').value.trim();
   if (!query || isSearching) return;
-
   isSearching = true;
   const totalStartTime = performance.now();
   let agentDuration = null;
   let apiDuration = null;
   const btn = document.getElementById('search-btn');
   btn.disabled = true;
-
   try {
-
   // 保存搜索历史
   saveSearchHistory(query);
-
   // 显示结果区域
   const resultsSection = document.getElementById('results-section');
   resultsSection.classList.add('active');
@@ -1790,7 +1720,6 @@ async function doSearch() {
   document.getElementById('product-grid').innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px;color:#999;">正在搜索商品...</div>';
   
   resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-
   // ===== AI智能体分析 =====
   let aiResult = null;
   let aiSource = 'none';
@@ -1840,7 +1769,6 @@ async function doSearch() {
     api: apiDuration, 
     total: performance.now() - totalStartTime 
   });
-
   // ===== Step 1: 需求分析与关键词提取（结构化渐变展示）=====
   const searchKeyword = aiResult.searchKeyword || query;
   const coreProduct = aiResult.coreProduct || query;
@@ -1915,7 +1843,6 @@ async function doSearch() {
       step1Content.appendChild(tokensEl);
     }
   }
-
   // ===== Step 2: 关键词扩展分析（渐变流式展示）=====
   await new Promise(r => setTimeout(r, 300));
   const expanded = aiResult.expandedKeywords || [];
@@ -2105,7 +2032,6 @@ async function doSearch() {
       if (contentEl4) contentEl4.appendChild(excludedEl);
     }
   }
-
   // ===== Step 3: 类目分布分析（搜索后统计）=====
   await new Promise(r => setTimeout(r, 250));
   const step3 = addLoadingStep('📊', 'Step 3: 类目分布分析中...', '搜索完成后将展示类目分布...');
@@ -2246,7 +2172,16 @@ async function doSearch() {
     }
     updateStep(step4, '⚠️', 'Step 4: OZON商品搜索', errDetail);
   }
- catch (e) {
+  // 隐藏顶部loading
+  const totalDuration = performance.now() - totalStartTime;
+  console.log('[耗时统计] 总调用时间:', formatDuration(totalDuration));
+  updateTimingDisplay({ agent: agentDuration, api: apiDuration, total: totalDuration });
+  document.getElementById('analysis-loading').style.display = 'none';
+  document.getElementById('analysis-sub').textContent = 'AI智能分析完成，已为您精准匹配OZON商品';
+  // ===== 渲染商品 =====
+  currentResults = products;
+  renderProducts(products);
+  } catch (e) {
     console.error('[搜索出错]', e);
     document.getElementById('product-grid').innerHTML = 
       '<div style="grid-column:1/-1;text-align:center;padding:60px;color:#999;">搜索出错: ' + escapeHtml(e.message) + '<br><br>请稍后重试或尝试其他关键词</div>';
@@ -2255,7 +2190,6 @@ async function doSearch() {
     btn.disabled = false;
   }
 }
-
 // ===== 渲染商品 =====
 function renderProducts(products, page) {
   const total = products?.length || 0;
@@ -2345,7 +2279,6 @@ function renderProducts(products, page) {
   
   grid.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
-
 // ===== 渲染分页组件 =====
 function renderPagination(total, totalPages, currentPage) {
   const paginationEl = document.getElementById('pagination');
@@ -2403,17 +2336,14 @@ function renderPagination(total, totalPages, currentPage) {
     pageNumbersEl.appendChild(span);
   });
 }
-
 // ===== 翻页 =====
 function changePage(delta) {
   goToPage(currentPage + delta);
 }
-
 function goToPage(page) {
   if (!currentResults || currentResults.length === 0) return;
   renderProducts(currentResults, page);
 }
-
 // ===== 跳转到指定页 =====
 function jumpToPage() {
   const input = document.getElementById('jump-input');
@@ -2426,13 +2356,11 @@ function jumpToPage() {
     input.value = currentPage;
   }
 }
-
 // ===== 快捷搜索 =====
 function quickSearch(keyword, displayName) {
   document.getElementById('search-input').value = displayName || keyword;
   doSearch();
 }
-
 // ===== 回车搜索 =====
 document.getElementById('search-input').addEventListener('keydown', function(e) {
   if (e.key === 'Enter' && !e.shiftKey) {
@@ -2440,7 +2368,6 @@ document.getElementById('search-input').addEventListener('keydown', function(e) 
     doSearch();
   }
 });
-
 // ===== 跳转输入框回车跳转 =====
 document.addEventListener('DOMContentLoaded', function() {
   const jumpInput = document.getElementById('jump-input');
@@ -2453,7 +2380,6 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 });
-
 // ===== 排序切换 =====
 document.getElementById('sort-filter').addEventListener('click', function(e) {
   if (!e.target.classList.contains('chip')) return;
@@ -2487,7 +2413,5 @@ document.getElementById('sort-filter').addEventListener('click', function(e) {
   renderProducts(sorted, 1);
 });
 </script>
-
 </body>
 </html>
-
