@@ -11,19 +11,31 @@ function escapeHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
-// ===== 俄语编码修复：latin-1 字节 -> UTF-8 字符串
+// ===== 文本编码修复：仅修复高置信度 Latin-1/UTF-8 乱码 =====
 function fixRussianEncoding(str) {
-  if (!str) return str;
-  if (typeof str !== 'string') return str;
+  if (!str || typeof str !== 'string') return str;
+
+  function mojibakeScore(value) {
+    const replacementChars = (value.match(/\uFFFD/g) || []).length;
+    const controlChars = (value.match(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g) || []).length;
+    const mojibakeMarkers = (value.match(/[ÃÂÐÑРС]/g) || []).length;
+    return replacementChars * 12 + controlChars * 8 + mojibakeMarkers * 2;
+  }
+
+  const originalScore = mojibakeScore(str);
+  if (originalScore === 0) return str;
+
   try {
-    if (/[\u0400-\u04FF]/.test(str)) return str;
     const bytes = new Uint8Array(str.length);
     for (let i = 0; i < str.length; i++) {
-      bytes[i] = str.charCodeAt(i) & 0xFF;
+      const code = str.charCodeAt(i);
+      if (code > 0xFF) return str;
+      bytes[i] = code;
     }
-    const decoder = new TextDecoder('utf-8');
-    return decoder.decode(bytes);
-  } catch(e) {
+
+    const decoded = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    return mojibakeScore(decoded) < originalScore ? decoded : str;
+  } catch (e) {
     return str;
   }
 }
