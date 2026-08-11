@@ -920,8 +920,7 @@ body {
   <div class="product-grid" id="product-grid">
     <div style="grid-column:1/-1;text-align:center;padding:60px;color:#999;">正在搜索商品...</div>
   </div>
-  <!-- 调试面板 -->
-  <pre id="debug-panel" style="display:none;background:#1e1e1e;color:#00ff00;padding:12px;margin:12px 0;font-size:12px;border-radius:6px;max-height:240px;overflow:auto;white-space:pre-wrap;"></pre>
+
   <!-- 分页组件 -->
   <div class="pagination" id="pagination" style="display:none;">
     <button class="page-btn" id="prev-btn" onclick="changePage(-1)">上一页</button>
@@ -2247,35 +2246,7 @@ async function doSearch() {
     }
     updateStep(step4, '⚠️', 'Step 4: OZON商品搜索', errDetail);
   }
-
-  // ===== 调试信息面板 =====
-  const debugPanel = document.getElementById('debug-panel');
-  if (debugPanel) {
-    const debugInfo = [
-      '【调试】userInput=' + '"' + query + '"',
-      '【调试】aiResult.searchKeyword=' + '"' + (aiResult && aiResult.searchKeyword || '(空)') + '"',
-      '【调试】aiResult.coreProduct=' + '"' + (aiResult && aiResult.coreProduct || '(空)') + '"',
-      '【调试】aiResult.products.length=' + (aiResult && aiResult.products ? aiResult.products.length : 0),
-      '【调试】主搜索详情: ' + (window._debugRaw || '(无)'),
-      '【调试】fetchProductsFromAPI 最终商品数=' + products.length,
-      '【调试】apiErrorMessage=' + (apiErrorMessage || '(无)')
-    ].join('\n');
-    debugPanel.textContent = debugInfo;
-    debugPanel.style.display = 'block';
-  }
-  
-  // 隐藏顶部loading
-  const totalDuration = performance.now() - totalStartTime;
-  console.log('[耗时统计] 总调用时间:', formatDuration(totalDuration));
-  updateTimingDisplay({ agent: agentDuration, api: apiDuration, total: totalDuration });
-  document.getElementById('analysis-loading').style.display = 'none';
-  document.getElementById('analysis-sub').textContent = 'AI智能分析完成，已为您精准匹配OZON商品';
-
-  // ===== 渲染商品 =====
-  currentResults = products;
-  renderProducts(products);
-  
-  } catch (e) {
+ catch (e) {
     console.error('[搜索出错]', e);
     document.getElementById('product-grid').innerHTML = 
       '<div style="grid-column:1/-1;text-align:center;padding:60px;color:#999;">搜索出错: ' + escapeHtml(e.message) + '<br><br>请稍后重试或尝试其他关键词</div>';
