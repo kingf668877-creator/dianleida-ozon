@@ -907,6 +907,7 @@ body {
   </div>
 </div>
 <script type="module">
+void async function(){
 // ===== 店雷达官方开放 REST 接口配置 =====
 // 按官方文档《店雷达接入说明》，对接 OZON 选品库接口：
 //   POST https://open.dianleida.net/api/v1/ozon/search
@@ -2528,6 +2529,7 @@ document.getElementById('sort-filter').addEventListener('click', function(e) {
 // mount
 try { window.doSearch=doSearch;window.fetchProductsFromAPI=fetchProductsFromAPI;window.renderProducts=renderProducts;window.renderCategoryChips=renderCategoryChips;window.toggleCategory=toggleCategory;window.restoreAllCategories=restoreAllCategories;window.rerunSearchWithCategories=rerunSearchWithCategories;window.showCategoryEmptyHint=showCategoryEmptyHint;window.callCozeCategoryBot=callCozeCategoryBot;window.callOzonSearch=callOzonSearch;
 } catch(e) { console.error("[mount]", e); }
+}().catch(e=>console.error("[main]",e));
 </script>
 </body>
 </html>
