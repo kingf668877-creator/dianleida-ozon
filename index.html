@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="icon" type="image/png" href="favicon.png">
 <title>店雷达 OZON 选品助手</title>
-<script>
+<script type="module">
 function escapeHtml(s) {
   if (!s) return '';
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -2523,6 +2523,10 @@ document.getElementById('sort-filter').addEventListener('click', function(e) {
   currentResults = sorted;
   renderProducts(sorted, 1);
 });
+
+
+// mount
+window.doSearch=doSearch;window.fetchProductsFromAPI=fetchProductsFromAPI;window.renderProducts=renderProducts;window.renderCategoryChips=renderCategoryChips;window.toggleCategory=toggleCategory;window.restoreAllCategories=restoreAllCategories;window.rerunSearchWithCategories=rerunSearchWithCategories;window.showCategoryEmptyHint=showCategoryEmptyHint;window.callCozeCategoryBot=callCozeCategoryBot;window.callOzonSearch=callOzonSearch;
 </script>
 </body>
 </html>
