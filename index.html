@@ -2246,6 +2246,7 @@ async function doSearch() {
     }
   }
   window._lastApiError = apiErrorMessage;
+  try { window.__lastAiResult = (aiResult && typeof aiResult === 'object') ? aiResult : window.__lastAiResult; currentCategoryTree = await callCozeCategoryBot(query); excludedCategoryIds.clear(); renderCategoryChips(); if (currentCategoryTree.length > 0) { const allIds = currentCategoryTree.map(c => c.id); const catResult = await fetchProductsFromAPI(query, aiResult, { categoryIdList: allIds }); if (catResult && Array.isArray(catResult.products) && catResult.products.length > 0) { products = catResult.products; categoryStats = catResult.categoryStats || []; window._debugRaw = 'categoryIdList=' + allIds.length; } } } catch (e) { console.warn('[CategoryBot] 合并重搜失败:', e.message); }
   apiDuration = performance.now() - apiStartTime;
   console.log('[耗时统计] OZON API:', formatDuration(apiDuration));
   updateTimingDisplay({ agent: agentDuration, api: apiDuration, total: performance.now() - totalStartTime });
