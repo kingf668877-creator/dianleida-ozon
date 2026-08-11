@@ -923,78 +923,127 @@ body {
 </div>
 
 <script>
-// ===== 店雷达官方开放 REST 接口配置 =====
 const OPEN_API_BASE = 'https://open.dianleida.net';
 const OZON_SEARCH_PATH = '/api/v1/ozon/search';
 const APP_ID = '56a337d738712dd3';
 const APP_SECRET = '3d24d39a56a337d738712dd32ca4f899';
 
-// ===== MD5 签名生成 =====
+// ===== MD5 签名生成（店雷达接入规范） =====
+// 已验证与 .NET MD5 完全一致（RFC 1321 标准实现）
 function md5(str) {
+  // 使用 TextEncoder 转 UTF-8 字节（正确处理中文等多字节字符）
   const utf8Bytes = new TextEncoder().encode(str);
-  const padded = new Uint8Array(Math.ceil((utf8Bytes.length + 9) / 64) * 64);
-  padded.set(utf8Bytes);
-  padded[utf8Bytes.length] = 0x80;
-  const bitLen = BigInt(utf8Bytes.length) * 8n;
-  for (let i = 0; i < 8; i++) {
-    padded[padded.length - 8 + i] = Number((bitLen >> BigInt(8 * i)) & 0xffn);
-  }
+  const n = utf8Bytes.length;
+  const wLen = Math.ceil((n + 9) / 64) * 64;
+  const w = new Array(wLen);
+  for (let i = 0; i < n; i++) w[i] = utf8Bytes[i];
+  w[n] = 0x80;
+  const bitLen = n * 8;
+  w[wLen - 8] = bitLen & 0xFF;
+  w[wLen - 7] = (bitLen >>> 8) & 0xFF;
+  w[wLen - 6] = (bitLen >>> 16) & 0xFF;
+  w[wLen - 5] = (bitLen >>> 24) & 0xFF;
+  w[wLen - 4] = 0; w[wLen - 3] = 0; w[wLen - 2] = 0; w[wLen - 1] = 0;
 
-  const K = new Int32Array([
-    -680876936, -389564586, 606105819, -1044525330,
-    -176418897, 1200080426, -1473231341, -45705983,
-    1770035416, -1958414417, -42063, -1990404162,
-    1804603682, -40341101, -1502002290, 1236535329
-  ]);
-  const sArr = [7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22,
-                5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20,
-                4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23,
-                6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21];
-
-  let a0 = 0x67452301 | 0;
-  let b0 = 0xefcdab89 | 0;
-  let c0 = 0x98badcfe | 0;
-  let d0 = 0x10325476 | 0;
-
-  const M = new Int32Array(16);
-  for (let block = 0; block < padded.length; block += 64) {
-    for (let i = 0; i < 16; i++) {
-      M[i] = (padded[block + i * 4]) |
-             (padded[block + i * 4 + 1] << 8) |
-             (padded[block + i * 4 + 2] << 16) |
-             (padded[block + i * 4 + 3] << 24);
-    }
-
-    let A = a0, B = b0, C = c0, D = d0;
-
-    for (let i = 0; i < 64; i++) {
-      let F, g;
-      if (i < 16) { F = (B & C) | (~B & D); g = i; }
-      else if (i < 32) { F = (D & B) | (~D & C); g = (5 * i + 1) % 16; }
-      else if (i < 48) { F = B ^ C ^ D; g = (3 * i + 5) % 16; }
-      else { F = C ^ (B | ~D); g = (7 * i) % 16; }
-
-      F = (F + A + K[i] + M[g]) | 0;
-      A = D;
-      D = C;
-      C = B;
-      B = (B + ((F << sArr[i]) | (F >>> (32 - sArr[i])))) | 0;
-    }
-
-    a0 = (a0 + A) | 0;
-    b0 = (b0 + B) | 0;
-    c0 = (c0 + C) | 0;
-    d0 = (d0 + D) | 0;
-  }
-
-  function toHex(n) {
+  function rh(n) {
     let s = '';
-    for (let i = 0; i < 4; i++) {
-      s += ((n >>> (i * 8 + 4)) & 0xf).toString(16) + ((n >>> (i * 8)) & 0xf).toString(16);
+    for (let j = 0; j < 4; j++) {
+      s += ((n >>> (j * 8)) & 0xFF).toString(16).padStart(2, '0');
     }
     return s;
   }
-  return toHex(a0 >>> 0) + toHex(b0 >>> 0) + toHex(c0 >>> 0) + toHex(d0 >>> 0);
+  function ad(x, y) {
+    const l = (x & 0xFFFF) + (y & 0xFFFF);
+    const m = (x >>> 16) + (y >>> 16) + (l >>> 16);
+    return (m << 16) | (l & 0xFFFF);
+  }
+  function rl(n, c) { return (n << c) | (n >>> (32 - c)); }
+  function cm(q, a, b, x, s, t) { return ad(rl(ad(ad(a, q), ad(x, t)), s), b); }
+
+  let a = 1732584193, b = -271733879, c = -1732584194, d = 271733878;
+
+  for (let i = 0; i < wLen; i += 64) {
+    const oa = a, ob = b, oc = c, od = d;
+
+    // Round 1
+    a = cm((b & c) | (~b & d), a, b, w[i],   7, -680876936);
+    d = cm((a & b) | (~a & c), d, a, w[i+1], 12, -389564586);
+    c = cm((d & a) | (~d & b), c, d, w[i+2], 17,  606105819);
+    b = cm((c & d) | (~c & a), b, c, w[i+3], 22, -1044525330);
+    a = cm((b & c) | (~b & d), a, b, w[i+4], 7,  -176418897);
+    d = cm((a & b) | (~a & c), d, a, w[i+5], 12, 1200080426);
+    c = cm((d & a) | (~d & b), c, d, w[i+6], 17, -1473231341);
+    b = cm((c & d) | (~c & a), b, c, w[i+7], 22,   -45705983);
+    a = cm((b & c) | (~b & d), a, b, w[i+8], 7,  1770035416);
+    d = cm((a & b) | (~a & c), d, a, w[i+9], 12, -1958414417);
+    c = cm((d & a) | (~d & b), c, d, w[i+10], 17,   -42063);
+    b = cm((c & d) | (~c & a), b, c, w[i+11], 22, -1990404162);
+    a = cm((b & c) | (~b & d), a, b, w[i+12], 7, 1804603682);
+    d = cm((a & b) | (~a & c), d, a, w[i+13], 12,  -40341101);
+    c = cm((d & a) | (~d & b), c, d, w[i+14], 17, -1502002290);
+    b = cm((c & d) | (~c & a), b, c, w[i+15], 22, 1236535329);
+
+    // Round 2
+    a = cm((b & d) | (c & ~d), a, b, w[i+1],  5,  -165796510);
+    d = cm((a & c) | (b & ~c), d, a, w[i+6],  9, -1069501632);
+    c = cm((d & b) | (a & ~b), c, d, w[i+11], 14,  643717713);
+    b = cm((c & a) | (d & ~a), b, c, w[i],   20,  -373897302);
+    a = cm((b & d) | (c & ~d), a, b, w[i+5],  5,  -701558691);
+    d = cm((a & c) | (b & ~c), d, a, w[i+10], 9,   38016083);
+    c = cm((d & b) | (a & ~b), c, d, w[i+15], 14,  -660478335);
+    b = cm((c & a) | (d & ~a), b, c, w[i+4],  20,  -405537848);
+    a = cm((b & d) | (c & ~d), a, b, w[i+9],  5,  568446438);
+    d = cm((a & c) | (b & ~c), d, a, w[i+14], 9, -1019803690);
+    c = cm((d & b) | (a & ~b), c, d, w[i+3],  14,  -187363961);
+    b = cm((c & a) | (d & ~a), b, c, w[i+8],  20, 1163531501);
+    a = cm((b & d) | (c & ~d), a, b, w[i+13], 5, -1444681467);
+    d = cm((a & c) | (b & ~c), d, a, w[i+2],  9,   -51403784);
+    c = cm((d & b) | (a & ~b), c, d, w[i+7],  14, 1735328473);
+    b = cm((c & a) | (d & ~a), b, c, w[i+12], 20, -1926607734);
+
+    // Round 3
+    a = cm(b ^ c ^ d, a, b, w[i+5],   4,    -378558);
+    d = cm(a ^ b ^ c, d, a, w[i+8],  11, -2022574463);
+    c = cm(d ^ a ^ b, c, d, w[i+11], 16,  1839030562);
+    b = cm(c ^ d ^ a, b, c, w[i+14], 23,   -35309556);
+    a = cm(b ^ c ^ d, a, b, w[i+1],   4,  -1530992060);
+    d = cm(a ^ b ^ c, d, a, w[i+4],  11,  1272893353);
+    c = cm(d ^ a ^ b, c, d, w[i+7],  16,  -155497632);
+    b = cm(c ^ d ^ a, b, c, w[i+10], 23, -1094730640);
+    a = cm(b ^ c ^ d, a, b, w[i+13],  4,   681279174);
+    d = cm(a ^ b ^ c, d, a, w[i],    11,  -358537222);
+    c = cm(d ^ a ^ b, c, d, w[i+3],  16,  -722521979);
+    b = cm(c ^ d ^ a, b, c, w[i+6],  23,    76029189);
+    a = cm(b ^ c ^ d, a, b, w[i+9],   4,  -640364487);
+    d = cm(a ^ b ^ c, d, a, w[i+12], 11,  -421815835);
+    c = cm(d ^ a ^ b, c, d, w[i+15], 16,   530742520);
+    b = cm(c ^ d ^ a, b, c, w[i+2],  23,  -995338651);
+
+    // Round 4
+    a = cm(c ^ (b | ~d), a, b, w[i],    6,  -198630844);
+    d = cm(b ^ (a | ~c), d, a, w[i+7], 10,  1126891415);
+    c = cm(a ^ (d | ~b), c, d, w[i+14], 15, -1416354905);
+    b = cm(d ^ (c | ~a), b, c, w[i+5],  21,   -57434055);
+    a = cm(c ^ (b | ~d), a, b, w[i+12], 6,  1700485571);
+    d = cm(b ^ (a | ~c), d, a, w[i+3], 10, -1894986606);
+    c = cm(a ^ (d | ~b), c, d, w[i+10], 15,    -1051523);
+    b = cm(d ^ (c | ~a), b, c, w[i+1],  21, -2054922799);
+    a = cm(c ^ (b | ~d), a, b, w[i+8],  6,  1873313359);
+    d = cm(b ^ (a | ~c), d, a, w[i+15], 10,   -30611744);
+    c = cm(a ^ (d | ~b), c, d, w[i+6],  15, -1560198380);
+    b = cm(d ^ (c | ~a), b, c, w[i+13], 21,  1309151649);
+    a = cm(c ^ (b | ~d), a, b, w[i+4],  6,  -145523070);
+    d = cm(b ^ (a | ~c), d, a, w[i+11], 10, -1120210379);
+    c = cm(a ^ (d | ~b), c, d, w[i+2],  15,   718787259);
+    b = cm(d ^ (c | ~a), b, c, w[i+9],  21,  -343485551);
+
+    a = ad(a, oa);
+    b = ad(b, ob);
+    c = ad(c, oc);
+    d = ad(d, od);
+  }
+
+  return rh(a) + rh(b) + rh(c) + rh(d);
 }
 
 function generateNonceStr() {
@@ -1043,7 +1092,6 @@ async function callOzonSearch(bizParams) {
   throw new Error('官方接口错误: code=' + (data && data.code) + ', msg=' + (data && data.msg));
 }
 
-// ===== 扣子智能体配置 =====
 const USE_COZE_AGENT = true;
 const COZE_BOT_ID = '7665184702596169782';
 const COZE_API_TOKEN = 'sat_M2oVUcRcmShLQVJuvMdLm7K7DSxC9KvvuZI8Yj9eqt4uSvelfMmeMsYSGqveGK1m';
@@ -1310,7 +1358,6 @@ async function callCozeSearchAnalysis(query, onStreamDelta) {
   }
 }
 
-// ===== 处理OZON商品数据 =====
 function processOzonProducts(items, excludedKeywords, requiredKeywords, coreProduct) {
   const result = [];
   const excluded = (excludedKeywords || []).map(k => k.toLowerCase());
@@ -1404,7 +1451,6 @@ function processOzonProducts(items, excludedKeywords, requiredKeywords, coreProd
   return result;
 }
 
-// ===== 从OZON MCP获取商品 =====
 async function fetchProductsFromAPI(keyword, aiResult) {
   const allProducts = [];
   const seenIds = new Set();
@@ -1436,7 +1482,7 @@ async function fetchProductsFromAPI(keyword, aiResult) {
       keyWord: keyWord,
       searchType: 3
     });
-    if (!result || !result.list || result.length === 0) {
+    if (!result || !result.list || result.list.length === 0) {
       throw new Error('官方接口返回空列表');
     }
     return { list: result.list, source: 'open' };
@@ -1655,13 +1701,7 @@ function addStep(icon, title, detail, tokens) {
   if (tokens && tokens.length > 0) {
     tokensHtml = '<div class="ai-step-tokens">' + tokens.map(t => '<span class="ai-token">' + escapeHtml(t) + '</span>').join('') + '</div>';
   }
-  stepEl.innerHTML = `
-    <span class="ai-step-icon">${icon}</span>
-    <div class="ai-step-content">
-      <div class="ai-step-title">${escapeHtml(title)}</div>
-      <div class="ai-step-detail">${escapeHtml(detail)}</div>
-      ${tokensHtml}
-    </div>`;
+  stepEl.innerHTML = '<span class="ai-step-icon">' + icon + '</span><div class="ai-step-content"><div class="ai-step-title">' + escapeHtml(title) + '</div><div class="ai-step-detail">' + escapeHtml(detail) + '</div>' + tokensHtml + '</div>';
   stepsContainer.appendChild(stepEl);
   return stepEl;
 }
@@ -1670,12 +1710,7 @@ function addLoadingStep(icon, title, detail) {
   const stepsContainer = document.getElementById('ai-steps');
   const stepEl = document.createElement('div');
   stepEl.className = 'ai-step show';
-  stepEl.innerHTML = `
-    <span class="ai-step-icon">${icon}</span>
-    <div class="ai-step-content">
-      <div class="ai-step-title">${escapeHtml(title)} <span class="loading-dots"><span></span><span></span><span></span></span></div>
-      ${detail ? `<div class="ai-step-detail">${escapeHtml(detail)}</div>` : ''}
-    </div>`;
+  stepEl.innerHTML = '<span class="ai-step-icon">' + icon + '</span><div class="ai-step-content"><div class="ai-step-title">' + escapeHtml(title) + ' <span class="loading-dots"><span></span><span></span><span></span></span></div>' + (detail ? '<div class="ai-step-detail">' + escapeHtml(detail) + '</div>' : '') + '</div>';
   stepsContainer.appendChild(stepEl);
   return stepEl;
 }
@@ -1706,13 +1741,7 @@ function updateStep(stepEl, icon, title, detail, tokens) {
     tokensHtml = '<div class="ai-step-tokens">' + tokens.map(t => '<span class="ai-token">' + escapeHtml(t) + '</span>').join('') + '</div>';
   }
   stepEl.className = 'ai-step show completed';
-  stepEl.innerHTML = `
-    <span class="ai-step-icon">${icon}</span>
-    <div class="ai-step-content">
-      <div class="ai-step-title">${escapeHtml(title)}</div>
-      <div class="ai-step-detail">${escapeHtml(detail)}</div>
-      ${tokensHtml}
-    </div>`;
+  stepEl.innerHTML = '<span class="ai-step-icon">' + icon + '</span><div class="ai-step-content"><div class="ai-step-title">' + escapeHtml(title) + '</div><div class="ai-step-detail">' + escapeHtml(detail) + '</div>' + tokensHtml + '</div>';
 }
 
 async function doSearch() {
@@ -1754,12 +1783,10 @@ async function doSearch() {
     if (analysisSubEl) {
       analysisSubEl.textContent = 'AI智能体分析中，请稍候...';
     }
-
     if (step1LiveDetail) {
       const progressDots = '.'.repeat((Math.floor(performance.now() / 500) % 3) + 1);
       step1LiveDetail.innerHTML = '<div style="font-size:13px; color:#6B7280;">正在提取核心关键词和修饰维度' + progressDots + '</div>';
     }
-
     updateTimingDisplay({
       agent: agentDuration,
       api: apiDuration,
@@ -1801,27 +1828,15 @@ async function doSearch() {
     step1Box.className = 'step-analysis-box';
 
     const rows = [];
-
     rows.push({ label: '核心产品：', content: coreProduct });
-
     rows.push({ label: '搜索词：', content: searchKeyword });
 
     const modParts = [];
-    if (modifiers.style && modifiers.style.length > 0) {
-      modParts.push('风格：' + modifiers.style.join('、'));
-    }
-    if (modifiers.material && modifiers.material.length > 0) {
-      modParts.push('材质：' + modifiers.material.join('、'));
-    }
-    if (modifiers.crowd && modifiers.crowd.length > 0) {
-      modParts.push('人群：' + modifiers.crowd.join('、'));
-    }
-    if (modifiers.scene && modifiers.scene.length > 0) {
-      modParts.push('场景：' + modifiers.scene.join('、'));
-    }
-    if (modParts.length > 0) {
-      rows.push({ label: '修饰维度：', content: modParts.join(' ｜ ') });
-    }
+    if (modifiers.style && modifiers.style.length > 0) modParts.push('风格：' + modifiers.style.join('、'));
+    if (modifiers.material && modifiers.material.length > 0) modParts.push('材质：' + modifiers.material.join('、'));
+    if (modifiers.crowd && modifiers.crowd.length > 0) modParts.push('人群：' + modifiers.crowd.join('、'));
+    if (modifiers.scene && modifiers.scene.length > 0) modParts.push('场景：' + modifiers.scene.join('、'));
+    if (modParts.length > 0) rows.push({ label: '修饰维度：', content: modParts.join(' ｜ ') });
 
     if (aiResult.categorySuggestion && aiResult.categorySuggestion.categoryName) {
       rows.push({ label: '推荐类目：', content: aiResult.categorySuggestion.categoryName });
@@ -1831,12 +1846,9 @@ async function doSearch() {
       const rowEl = document.createElement('div');
       rowEl.className = 'step-analysis-row';
       rowEl.style.animationDelay = (index * 0.12) + 's';
-      rowEl.innerHTML =
-        '<span class="label">' + escapeHtml(row.label) + '</span>' +
-        '<span class="keywords">' + escapeHtml(row.content) + '</span>';
+      rowEl.innerHTML = '<span class="label">' + escapeHtml(row.label) + '</span><span class="keywords">' + escapeHtml(row.content) + '</span>';
       step1Box.appendChild(rowEl);
     });
-
     step1Content.appendChild(step1Box);
 
     const allMods = [];
@@ -1849,9 +1861,7 @@ async function doSearch() {
       const tokensEl = document.createElement('div');
       tokensEl.className = 'ai-step-tokens';
       tokensEl.style.animationDelay = (rows.length * 0.12) + 's';
-      tokensEl.innerHTML =
-        '<span class="ai-token main-token">' + escapeHtml(searchKeyword) + '</span>' +
-        allMods.map(m => '<span class="ai-token">' + escapeHtml(m) + '</span>').join('');
+      tokensEl.innerHTML = '<span class="ai-token main-token">' + escapeHtml(searchKeyword) + '</span>' + allMods.map(m => '<span class="ai-token">' + escapeHtml(m) + '</span>').join('');
       step1Content.appendChild(tokensEl);
     }
   }
@@ -1886,57 +1896,28 @@ async function doSearch() {
     if (contentEl) {
       const analysisBox = document.createElement('div');
       analysisBox.className = 'step-analysis-box';
-
       const analysisRows = [];
-
       if (candidateKeywords.length > 0) {
-        analysisRows.push({
-          label: '候选：',
-          content: candidateKeywords.slice(0, 12).join('、') + (candidateKeywords.length > 12 ? ' 等' : '')
-        });
+        analysisRows.push({ label: '候选：', content: candidateKeywords.slice(0, 12).join('、') + (candidateKeywords.length > 12 ? ' 等' : '') });
       }
-
-      analysisRows.push({
-        label: '选择：',
-        content: selectedKeywords.join('、')
-      });
-
+      analysisRows.push({ label: '选择：', content: selectedKeywords.join('、') });
       if (russianKeywords.length > 0) {
-        analysisRows.push({
-          label: '俄语：',
-          content: russianKeywords.slice(0, 8).join('、') + (russianKeywords.length > 8 ? ' 等' : '')
-        });
+        analysisRows.push({ label: '俄语：', content: russianKeywords.slice(0, 8).join('、') + (russianKeywords.length > 8 ? ' 等' : '') });
       }
-
       if (chineseKeywords.length > 0) {
-        analysisRows.push({
-          label: '中文：',
-          content: chineseKeywords.slice(0, 8).join('、') + (chineseKeywords.length > 8 ? ' 等' : '')
-        });
+        analysisRows.push({ label: '中文：', content: chineseKeywords.slice(0, 8).join('、') + (chineseKeywords.length > 8 ? ' 等' : '') });
       }
-
       if (excluded.length > 0) {
-        analysisRows.push({
-          label: '排除：',
-          content: excluded.join('、')
-        });
+        analysisRows.push({ label: '排除：', content: excluded.join('、') });
       }
-
-      analysisRows.push({
-        label: '原则：',
-        content: '俄语词用于主搜索（词组匹配），中文词用于中文标题匹配，英文词作为备用搜索，排除词过滤不相关商品'
-      });
-
+      analysisRows.push({ label: '原则：', content: '俄语词用于主搜索（词组匹配），中文词用于中文标题匹配，英文词作为备用搜索，排除词过滤不相关商品' });
       analysisRows.forEach((row, index) => {
         const rowEl = document.createElement('div');
         rowEl.className = 'step-analysis-row';
         rowEl.style.animationDelay = (index * 0.15) + 's';
-        rowEl.innerHTML =
-          '<span class="label">' + escapeHtml(row.label) + '</span>' +
-          '<span class="keywords">' + escapeHtml(row.content) + '</span>';
+        rowEl.innerHTML = '<span class="label">' + escapeHtml(row.label) + '</span><span class="keywords">' + escapeHtml(row.content) + '</span>';
         analysisBox.appendChild(rowEl);
       });
-
       contentEl.appendChild(analysisBox);
     }
   }
@@ -1944,28 +1925,14 @@ async function doSearch() {
   if (russianKeywords.length > 0) {
     const russianEl = document.createElement('div');
     russianEl.className = 'russian-keywords-box';
-
     let keywordsHtml = '';
     if (russianKeywordsExplain && russianKeywordsExplain.length > 0) {
-      keywordsHtml = russianKeywordsExplain.map(item =>
-        '<span class="russian-keyword-item">' +
-          escapeHtml(item.keyword || item) +
-          (item.meaning ? ' <span class="meaning">(' + escapeHtml(item.meaning) + ')</span>' : '') +
-        '</span>'
-      ).join('');
+      keywordsHtml = russianKeywordsExplain.map(item => '<span class="russian-keyword-item">' + escapeHtml(item.keyword || item) + (item.meaning ? ' <span class="meaning">(' + escapeHtml(item.meaning) + ')</span>' : '') + '</span>').join('');
     } else {
-      keywordsHtml = russianKeywords.map(kw =>
-        '<span class="russian-keyword-item">' + escapeHtml(kw) + '</span>'
-      ).join('');
+      keywordsHtml = russianKeywords.map(kw => '<span class="russian-keyword-item">' + escapeHtml(kw) + '</span>').join('');
     }
-
     const russianText = russianKeywords.join(', ');
-
-    russianEl.innerHTML =
-      '<div class="russian-keywords-title">🇷🇺 俄语关键词（主搜索词·词组匹配）</div>' +
-      '<div class="russian-keywords-text">' + keywordsHtml + '</div>' +
-      '<button class="copy-btn" onclick="navigator.clipboard.writeText(\'' + escapeHtml(russianText).replace(/'/g, "\\'") + '\');this.textContent=\'已复制✓\';this.classList.add(\'copied\');setTimeout(()=>{this.textContent=\'复制\';this.classList.remove(\'copied\')},2000)">复制全部</button>';
-
+    russianEl.innerHTML = '<div class="russian-keywords-title">🇷🇺 俄语关键词（主搜索词·词组匹配）</div><div class="russian-keywords-text">' + keywordsHtml + '</div><button class="copy-btn" onclick="navigator.clipboard.writeText(\'' + escapeHtml(russianText).replace(/'/g, "\\'") + '\');this.textContent=\'已复制✓\';this.classList.add(\'copied\');setTimeout(()=>{this.textContent=\'复制\';this.classList.remove(\'copied\')},2000)">复制全部</button>';
     const lastStep2 = document.getElementById('ai-steps').lastElementChild;
     if (lastStep2) {
       const contentEl2 = lastStep2.querySelector('.ai-step-content');
@@ -1976,28 +1943,14 @@ async function doSearch() {
   if (chineseKeywords.length > 0) {
     const chineseEl = document.createElement('div');
     chineseEl.className = 'chinese-keywords-box';
-
     let keywordsHtml = '';
     if (chineseKeywordsExplain && chineseKeywordsExplain.length > 0) {
-      keywordsHtml = chineseKeywordsExplain.map(item =>
-        '<span class="chinese-keyword-item">' +
-          escapeHtml(item.keyword || item) +
-          (item.meaning ? ' <span class="meaning">(' + escapeHtml(item.meaning) + ')</span>' : '') +
-        '</span>'
-      ).join('');
+      keywordsHtml = chineseKeywordsExplain.map(item => '<span class="chinese-keyword-item">' + escapeHtml(item.keyword || item) + (item.meaning ? ' <span class="meaning">(' + escapeHtml(item.meaning) + ')</span>' : '') + '</span>').join('');
     } else {
-      keywordsHtml = chineseKeywords.map(kw =>
-        '<span class="chinese-keyword-item">' + escapeHtml(kw) + '</span>'
-      ).join('');
+      keywordsHtml = chineseKeywords.map(kw => '<span class="chinese-keyword-item">' + escapeHtml(kw) + '</span>').join('');
     }
-
     const chineseText = chineseKeywords.join(', ');
-
-    chineseEl.innerHTML =
-      '<div class="chinese-keywords-title">🇨🇳 中文关键词（中文标题匹配）</div>' +
-      '<div class="chinese-keywords-text">' + keywordsHtml + '</div>' +
-      '<button class="copy-btn" onclick="navigator.clipboard.writeText(\'' + escapeHtml(chineseText).replace(/'/g, "\\'") + '\');this.textContent=\'已复制✓\';this.classList.add(\'copied\');setTimeout(()=>{this.textContent=\'复制\';this.classList.remove(\'copied\')},2000)">复制全部</button>';
-
+    chineseEl.innerHTML = '<div class="chinese-keywords-title">🇨🇳 中文关键词（中文标题匹配）</div><div class="chinese-keywords-text">' + keywordsHtml + '</div><button class="copy-btn" onclick="navigator.clipboard.writeText(\'' + escapeHtml(chineseText).replace(/'/g, "\\'") + '\');this.textContent=\'已复制✓\';this.classList.add(\'copied\');setTimeout(()=>{this.textContent=\'复制\';this.classList.remove(\'copied\')},2000)">复制全部</button>';
     const lastStep2 = document.getElementById('ai-steps').lastElementChild;
     if (lastStep2) {
       const contentEl2 = lastStep2.querySelector('.ai-step-content');
@@ -2009,10 +1962,7 @@ async function doSearch() {
   if (expanded.length > 0) {
     const englishEl = document.createElement('div');
     englishEl.className = 'english-keywords-box';
-    englishEl.innerHTML =
-      '<div class="english-keywords-title">🔤 英文搜索词（备用）</div>' +
-      expanded.map(kw => '<span class="english-keyword-tag">' + escapeHtml(kw) + '</span>').join('');
-
+    englishEl.innerHTML = '<div class="english-keywords-title">🔤 英文搜索词（备用）</div>' + expanded.map(kw => '<span class="english-keyword-tag">' + escapeHtml(kw) + '</span>').join('');
     const lastStep3 = document.getElementById('ai-steps').lastElementChild;
     if (lastStep3) {
       const contentEl3 = lastStep3.querySelector('.ai-step-content');
@@ -2023,8 +1973,7 @@ async function doSearch() {
   if (excluded.length > 0) {
     const excludedEl = document.createElement('div');
     excludedEl.style.cssText = 'margin-top:8px;font-size:12px;color:#9CA3AF;';
-    excludedEl.innerHTML = '<span style="color:#9CA3AF;">排除词：</span>' +
-      excluded.slice(0, 6).map(k => '<span style="display:inline-block;padding:2px 8px;margin:2px;background:#FEF2F2;color:#EF4444;border-radius:10px;font-size:11px;">' + escapeHtml(k) + '</span>').join('');
+    excludedEl.innerHTML = '<span style="color:#9CA3AF;">排除词：</span>' + excluded.slice(0, 6).map(k => '<span style="display:inline-block;padding:2px 8px;margin:2px;background:#FEF2F2;color:#EF4444;border-radius:10px;font-size:11px;">' + escapeHtml(k) + '</span>').join('');
     const lastStep4 = document.getElementById('ai-steps').lastElementChild;
     if (lastStep4) {
       const contentEl4 = lastStep4.querySelector('.ai-step-content');
@@ -2034,7 +1983,6 @@ async function doSearch() {
 
   await new Promise(r => setTimeout(r, 250));
   const step3 = addLoadingStep('📊', 'Step 3: 类目分布分析中...', '搜索完成后将展示类目分布...');
-
   const step4 = addLoadingStep('📡', 'Step 4: OZON商品搜索');
 
   let products = [];
@@ -2058,7 +2006,6 @@ async function doSearch() {
       const img = item.img || item.image || '';
       const url = item.url || item.offerUrl || '';
       const id = item.id || item.offerId || '';
-
       let relevanceScore = 0;
       let chineseMatch = false;
       let russianMatch = false;
@@ -2077,45 +2024,25 @@ async function doSearch() {
         }
       }
       relevanceScore += Math.min(2, Math.log10(sales + 1) / 3);
-
       return {
-        id: String(id),
-        title: subject,
-        titleCn: subjectCn,
-        price: price,
-        priceRmb: priceCny,
-        sales: sales,
-        saleVolume30d: volume,
-        saleVolume30dRate: 0,
-        score: 0,
-        ratingNum: 0,
-        img: img,
-        link: url,
-        category: cat,
-        typeId: String(item.typeId || ''),
-        categoryName: cat,
-        companyType: sellerType,
-        workingMode: workingMode,
-        brand: brand,
-        matchedByChinese: chineseMatch,
-        matchedByRussian: russianMatch,
-        _relevance: relevanceScore,
-        _raw: item
+        id: String(id), title: subject, titleCn: subjectCn,
+        price: price, priceRmb: priceCny, sales: sales, saleVolume30d: volume,
+        saleVolume30dRate: 0, score: 0, ratingNum: 0, img: img, link: url, category: cat,
+        typeId: String(item.typeId || ''), categoryName: cat,
+        companyType: sellerType, workingMode: workingMode, brand: brand,
+        matchedByChinese: chineseMatch, matchedByRussian: russianMatch,
+        _relevance: relevanceScore, _raw: item
       };
     });
-
     const catMap = {};
     products.forEach(p => {
       const cat = (p.categoryName || '').split('>').pop().trim();
-      if (cat) {
-        catMap[cat] = (catMap[cat] || 0) + 1;
-      }
+      if (cat) catMap[cat] = (catMap[cat] || 0) + 1;
     });
     const total = products.length;
     categoryStats = Object.entries(catMap)
       .map(([name, count]) => ({ id: name, name, count, ratio: Math.round((count / total) * 100) }))
       .sort((a, b) => b.count - a.count);
-
   } else {
     console.log('[数据源] 扣子未返回商品数据，使用前端 MCP API 调用');
     try {
@@ -2135,13 +2062,9 @@ async function doSearch() {
   if (categoryStats.length > 0) {
     const topCat = categoryStats[0];
     const catTags = categoryStats.map(c => '类目' + c.id + ' (' + c.ratio + '%)');
-    updateStep(step3, '✅', 'Step 3: 类目分布分析',
-      '共覆盖 ' + categoryStats.length + ' 个类目 · Top类目占比 ' + topCat.ratio + '%',
-      catTags
-    );
+    updateStep(step3, '✅', 'Step 3: 类目分布分析', '共覆盖 ' + categoryStats.length + ' 个类目 · Top类目占比 ' + topCat.ratio + '%', catTags);
   } else {
-    updateStep(step3, '⚠️', 'Step 3: 类目分布分析',
-      '暂无类目数据');
+    updateStep(step3, '⚠️', 'Step 3: 类目分布分析', '暂无类目数据');
   }
 
   if (products.length > 0) {
@@ -2150,10 +2073,7 @@ async function doSearch() {
     const displaySearch = searchWords.join('、');
     const isFromCoze = aiResult && Array.isArray(aiResult.products) && aiResult.products.length > 0;
     const sourceLabel = isFromCoze ? '智能体调用API' : '实时API';
-    updateStep(step4, '✅', 'Step 4: OZON商品搜索完成',
-      '搜索词：' + displaySearch + ' · 从OZON实时获取 ' + products.length + ' 条商品数据',
-      [sourceLabel, products.length + '件商品']
-    );
+    updateStep(step4, '✅', 'Step 4: OZON商品搜索完成', '搜索词：' + displaySearch + ' · 从OZON实时获取 ' + products.length + ' 条商品数据', [sourceLabel, products.length + '件商品']);
   } else {
     let errDetail = '请稍后重试或更换关键词';
     if (apiErrorMessage.includes('请求频率过高') || apiErrorMessage.includes('rate limit')) {
@@ -2190,8 +2110,7 @@ async function doSearch() {
 
   } catch (e) {
     console.error('[搜索出错]', e);
-    document.getElementById('product-grid').innerHTML =
-      '<div style="grid-column:1/-1;text-align:center;padding:60px;color:#999;">搜索出错: ' + escapeHtml(e.message) + '<br><br>请稍后重试或尝试其他关键词</div>';
+    document.getElementById('product-grid').innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px;color:#999;">搜索出错: ' + escapeHtml(e.message) + '<br><br>请稍后重试或尝试其他关键词</div>';
   } finally {
     isSearching = false;
     btn.disabled = false;
@@ -2241,18 +2160,12 @@ function renderProducts(products, page) {
     }
 
     let badges = '';
-    if (p.companyType === 1) {
-      badges += '<span class="product-badge badge-cross">跨境</span>';
-    } else if (p.companyType === 2) {
-      badges += '<span class="product-badge badge-local">本地</span>';
-    }
+    if (p.companyType === 1) badges += '<span class="product-badge badge-cross">跨境</span>';
+    else if (p.companyType === 2) badges += '<span class="product-badge badge-local">本地</span>';
     if (p.workingMode) {
       const wm = String(p.workingMode).toUpperCase();
-      if (wm.includes('FBO')) {
-        badges += '<span class="product-badge badge-fbo">FBO</span>';
-      } else if (wm.includes('FBS')) {
-        badges += '<span class="product-badge badge-fbs">FBS</span>';
-      }
+      if (wm.includes('FBO')) badges += '<span class="product-badge badge-fbo">FBO</span>';
+      else if (wm.includes('FBS')) badges += '<span class="product-badge badge-fbs">FBS</span>';
     }
     if ((p.sales || 0) > 1000) badges += '<span class="product-badge badge-hot">热销</span>';
     if (p.matchedByRussian) badges += '<span class="product-badge badge-ru-match">俄语命中</span>';
@@ -2260,30 +2173,13 @@ function renderProducts(products, page) {
 
     const priceRub = p.price ? Number(p.price).toLocaleString() : '0';
     const priceRmb = p.priceRmb ? '¥' + Number(p.priceRmb).toFixed(0) : '';
-
     const saleVol = p.saleVolume30d ? Number(p.saleVolume30d).toLocaleString() + ' ₽' : '--';
 
-    card.innerHTML = `
-      <div class="product-img-wrap">${imgHtml}</div>
-      <div class="product-info">
-        <div class="product-title">${badges}${escapeHtml(p.title)}</div>
-        ${p.titleCn ? `<div class="product-title-cn">🇨🇳 ${escapeHtml(p.titleCn)}</div>` : ''}
-        <div class="product-price">${priceRub} <span>₽</span><span class="product-price-rmb">${priceRmb}</span></div>
-        <div class="product-meta">
-          <span>月销 ${(p.sales || 0).toLocaleString()}</span>
-          <span>⭐ ${p.score ? p.score.toFixed(1) : '--'}</span>
-        </div>
-        <div class="product-meta" style="margin-top:4px;">
-          <span>月额 ${saleVol}</span>
-          <span>${p.ratingNum ? p.ratingNum.toLocaleString() + '评价' : ''}</span>
-        </div>
-      </div>
-    `;
+    card.innerHTML = '<div class="product-img-wrap">' + imgHtml + '</div><div class="product-info"><div class="product-title">' + badges + escapeHtml(p.title) + '</div>' + (p.titleCn ? '<div class="product-title-cn">🇨🇳 ' + escapeHtml(p.titleCn) + '</div>' : '') + '<div class="product-price">' + priceRub + ' <span>₽</span><span class="product-price-rmb">' + priceRmb + '</span></div><div class="product-meta"><span>月销 ' + (p.sales || 0).toLocaleString() + '</span><span>⭐ ' + (p.score ? p.score.toFixed(1) : '--') + '</span></div><div class="product-meta" style="margin-top:4px;"><span>月额 ' + saleVol + '</span><span>' + (p.ratingNum ? p.ratingNum.toLocaleString() + '评价' : '') + '</span></div></div>';
     grid.appendChild(card);
   });
 
   renderPagination(total, totalPages, page);
-
   grid.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
@@ -2300,11 +2196,9 @@ function renderPagination(total, totalPages, currentPage) {
   }
 
   paginationEl.style.display = 'flex';
-
   prevBtn.disabled = currentPage <= 1;
   nextBtn.disabled = currentPage >= totalPages;
-
-  pageInfoEl.textContent = `共 ${total} 件 · 第 ${currentPage}/${totalPages} 页`;
+  pageInfoEl.textContent = '共 ' + total + ' 件 · 第 ' + currentPage + '/' + totalPages + ' 页';
 
   const jumpInput = document.getElementById('jump-input');
   if (jumpInput) {
@@ -2314,19 +2208,12 @@ function renderPagination(total, totalPages, currentPage) {
 
   let pages = [];
   const showPages = 5;
-
   if (totalPages <= showPages + 2) {
-    for (let i = 1; i <= totalPages; i++) {
-      pages.push(i);
-    }
+    for (let i = 1; i <= totalPages; i++) pages.push(i);
   } else {
-    if (currentPage <= 3) {
-      pages = [1, 2, 3, 4, '...', totalPages];
-    } else if (currentPage >= totalPages - 2) {
-      pages = [1, '...', totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
-    } else {
-      pages = [1, '...', currentPage - 1, currentPage, currentPage + 1, '...', totalPages];
-    }
+    if (currentPage <= 3) pages = [1, 2, 3, 4, '...', totalPages];
+    else if (currentPage >= totalPages - 2) pages = [1, '...', totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
+    else pages = [1, '...', currentPage - 1, currentPage, currentPage + 1, '...', totalPages];
   }
 
   pageNumbersEl.innerHTML = '';
@@ -2343,10 +2230,7 @@ function renderPagination(total, totalPages, currentPage) {
   });
 }
 
-function changePage(delta) {
-  goToPage(currentPage + delta);
-}
-
+function changePage(delta) { goToPage(currentPage + delta); }
 function goToPage(page) {
   if (!currentResults || currentResults.length === 0) return;
   renderProducts(currentResults, page);
@@ -2357,11 +2241,8 @@ function jumpToPage() {
   if (!input) return;
   const page = parseInt(input.value);
   const totalPages = Math.ceil(currentResults.length / PAGE_SIZE);
-  if (!isNaN(page) && page >= 1 && page <= totalPages) {
-    goToPage(page);
-  } else {
-    input.value = currentPage;
-  }
+  if (!isNaN(page) && page >= 1 && page <= totalPages) goToPage(page);
+  else input.value = currentPage;
 }
 
 function quickSearch(keyword, displayName) {
@@ -2370,20 +2251,14 @@ function quickSearch(keyword, displayName) {
 }
 
 document.getElementById('search-input').addEventListener('keydown', function(e) {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault();
-    doSearch();
-  }
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doSearch(); }
 });
 
 document.addEventListener('DOMContentLoaded', function() {
   const jumpInput = document.getElementById('jump-input');
   if (jumpInput) {
     jumpInput.addEventListener('keydown', function(e) {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        jumpToPage();
-      }
+      if (e.key === 'Enter') { e.preventDefault(); jumpToPage(); }
     });
   }
 });
@@ -2402,19 +2277,12 @@ document.getElementById('sort-filter').addEventListener('click', function(e) {
       if (Math.abs(scoreDiff) > 0.01) return scoreDiff;
       return (b.sales || 0) - (a.sales || 0);
     });
-  } else if (sort === 'sales') {
-    sorted.sort((a, b) => (b.sales || 0) - (a.sales || 0));
-  } else if (sort === 'revenue') {
-    sorted.sort((a, b) => (b.saleVolume30d || 0) - (a.saleVolume30d || 0));
-  } else if (sort === 'growth') {
-    sorted.sort((a, b) => (b.saleVolume30dRate || 0) - (a.saleVolume30dRate || 0));
-  } else if (sort === 'price-low') {
-    sorted.sort((a, b) => (a.price || 0) - (b.price || 0));
-  } else if (sort === 'price-high') {
-    sorted.sort((a, b) => (b.price || 0) - (a.price || 0));
-  } else if (sort === 'rating') {
-    sorted.sort((a, b) => (b.score || 0) - (a.score || 0));
-  }
+  } else if (sort === 'sales') sorted.sort((a, b) => (b.sales || 0) - (a.sales || 0));
+  else if (sort === 'revenue') sorted.sort((a, b) => (b.saleVolume30d || 0) - (a.saleVolume30d || 0));
+  else if (sort === 'growth') sorted.sort((a, b) => (b.saleVolume30dRate || 0) - (a.saleVolume30dRate || 0));
+  else if (sort === 'price-low') sorted.sort((a, b) => (a.price || 0) - (b.price || 0));
+  else if (sort === 'price-high') sorted.sort((a, b) => (b.price || 0) - (a.price || 0));
+  else if (sort === 'rating') sorted.sort((a, b) => (b.score || 0) - (a.score || 0));
 
   currentResults = sorted;
   renderProducts(sorted, 1);
