@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -937,6 +937,14 @@ const APP_SECRET = '3d24d39a56a337d738712dd32ca4f899';
 
 // ===== MD5 签名生成（使用 blueimp-md5 CDN 库） =====
 // window.md5 由 blueimp-md5 库提供
+function generateNonceStr() {
+  if (window.crypto && window.crypto.getRandomValues) {
+    const bytes = new Uint8Array(16);
+    window.crypto.getRandomValues(bytes);
+    return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+  }
+  return Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+}
 
 function buildSign(params, appSecret) {
   // 1. 除 sign 外按 key 字典排序，空值不参与签名
