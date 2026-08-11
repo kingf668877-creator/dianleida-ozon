@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="icon" type="image/png" href="favicon.png">
 <title>店雷达 OZON 选品助手</title>
-<script type="module">
+<script>
 function escapeHtml(s) {
   if (!s) return '';
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -906,7 +906,7 @@ body {
     </div>
   </div>
 </div>
-<script type="module">
+<script>
 void async function(){
 // ===== 店雷达官方开放 REST 接口配置 =====
 // 按官方文档《店雷达接入说明》，对接 OZON 选品库接口：
@@ -2527,7 +2527,7 @@ document.getElementById('sort-filter').addEventListener('click', function(e) {
 
 
 
-window.doSearch=doSearch;window.fetchProductsFromAPI=fetchProductsFromAPI;window.renderProducts=renderProducts;window.renderCategoryChips=renderCategoryChips;window.toggleCategory=toggleCategory;window.restoreAllCategories=restoreAllCategories;window.rerunSearchWithCategories=rerunSearchWithCategories;window.showCategoryEmptyHint=showCategoryEmptyHint;window.callCozeCategoryBot=callCozeCategoryBot;window.callOzonSearch=callOzonSearch; var __btn=document.getElementById("search-btn"); if(__btn && !__btn.__wired){ __btn.addEventListener("click", function(){ doSearch(); }); __btn.__wired=true; } console.log("[mount] ok"); }();;
+window.doSearch=doSearch;window.fetchProductsFromAPI=fetchProductsFromAPI;window.renderProducts=renderProducts;window.renderCategoryChips=renderCategoryChips;window.toggleCategory=toggleCategory;window.restoreAllCategories=restoreAllCategories;window.rerunSearchWithCategories=rerunSearchWithCategories;window.showCategoryEmptyHint=showCategoryEmptyHint;window.callCozeCategoryBot=callCozeCategoryBot; }();;
 </script>
 </body>
 </html>
