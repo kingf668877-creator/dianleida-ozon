@@ -2526,7 +2526,8 @@ document.getElementById('sort-filter').addEventListener('click', function(e) {
 
 
 // mount
-window.doSearch=doSearch;window.fetchProductsFromAPI=fetchProductsFromAPI;window.renderProducts=renderProducts;window.renderCategoryChips=renderCategoryChips;window.toggleCategory=toggleCategory;window.restoreAllCategories=restoreAllCategories;window.rerunSearchWithCategories=rerunSearchWithCategories;window.showCategoryEmptyHint=showCategoryEmptyHint;window.callCozeCategoryBot=callCozeCategoryBot;window.callOzonSearch=callOzonSearch;
+try { window.doSearch=doSearch;window.fetchProductsFromAPI=fetchProductsFromAPI;window.renderProducts=renderProducts;window.renderCategoryChips=renderCategoryChips;window.toggleCategory=toggleCategory;window.restoreAllCategories=restoreAllCategories;window.rerunSearchWithCategories=rerunSearchWithCategories;window.showCategoryEmptyHint=showCategoryEmptyHint;window.callCozeCategoryBot=callCozeCategoryBot;window.callOzonSearch=callOzonSearch;
+} catch(e) { console.error("[mount]", e); }
 </script>
 </body>
 </html>
