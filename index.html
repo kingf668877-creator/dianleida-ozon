@@ -2526,10 +2526,9 @@ document.getElementById('sort-filter').addEventListener('click', function(e) {
 });
 
 
-// mount
-try { window.doSearch=doSearch;window.fetchProductsFromAPI=fetchProductsFromAPI;window.renderProducts=renderProducts;window.renderCategoryChips=renderCategoryChips;window.toggleCategory=toggleCategory;window.restoreAllCategories=restoreAllCategories;window.rerunSearchWithCategories=rerunSearchWithCategories;window.showCategoryEmptyHint=showCategoryEmptyHint;window.callCozeCategoryBot=callCozeCategoryBot;window.callOzonSearch=callOzonSearch;
-} catch(e) { console.error("[mount]", e); }
-}().catch(e=>console.error("[main]",e));
+// mount (declared, executed at end)
+function __mountToWindow() { try { window.doSearch=doSearch;window.fetchProductsFromAPI=fetchProductsFromAPI;window.renderProducts=renderProducts;window.renderCategoryChips=renderCategoryChips;window.toggleCategory=toggleCategory;window.restoreAllCategories=restoreAllCategories;window.rerunSearchWithCategories=rerunSearchWithCategories;window.showCategoryEmptyHint=showCategoryEmptyHint;window.callCozeCategoryBot=callCozeCategoryBot;window.callOzonSearch=callOzonSearch; console.log("[mount] ok"); } catch(e) { console.error("[mount]", e); } }
+__mountToWindow(); }().catch(function(e){ console.error("[main]", e); __mountToWindow(); });
 </script>
 </body>
 </html>
