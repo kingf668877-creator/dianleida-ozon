@@ -2177,12 +2177,31 @@ async function doSearch() {
       throw new Error('未获取到有效类目，已停止商品搜索');
     }
 
-    const categoryIdList = currentCategoryTree.map(c => c.id).filter(Boolean).slice(0, 1);
     console.log('[类目优先] 搜索类目:', currentCategoryTree);
-    const result = await fetchProductsFromAPI(query, aiResult, { categoryIdList });
-    products = result.products || [];
-    categoryStats = result.categoryStats || [];
-    window._debugRaw = 'categoryIdList=' + categoryIdList.join(',');
+    const seenIds = new Set();
+    const allProducts = [];
+    let mergedStats = [];
+    for (const cat of currentCategoryTree) {
+      if (!cat || !cat.id || excludedCategoryIds.has(cat.id)) continue;
+      try {
+        const result = await fetchProductsFromAPI(query, aiResult, { categoryIdList: [cat.id] });
+        const list = result.products || [];
+        for (const p of list) {
+          if (!seenIds.has(p.id)) {
+            seenIds.add(p.id);
+            allProducts.push(p);
+          }
+        }
+        if (Array.isArray(result.categoryStats)) {
+          mergedStats = mergedStats.concat(result.categoryStats);
+        }
+      } catch (e) {
+        console.warn('[类目循环] 类目 ' + cat.id + ' 搜索失败:', e.message);
+      }
+    }
+    products = allProducts;
+    categoryStats = mergedStats;
+    window._debugRaw = 'categoryIdList=' + currentCategoryTree.map(c => c.id).filter(Boolean).join(',');
 
     if (!products.length) apiErrorMessage = '所选类目内暂无匹配商品';
   } catch (e) {
