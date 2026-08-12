@@ -1499,7 +1499,8 @@ function processOzonProducts(items, excludedKeywords, requiredKeywords, coreProd
 async function fetchProductsFromAPI(keyword, aiResult, options) {
   const allProducts = [];
   const opts = options || {};
-  const categoryIdList = Array.isArray(opts.categoryIdList) && opts.categoryIdList.length > 0 ? opts.categoryIdList : null;
+  const categoryIdList = Array.isArray(opts.categoryIdList) ? opts.categoryIdList.map(String).filter(Boolean).slice(0, 20) : [];
+  if (categoryIdList.length === 0) throw new Error('缺少类目ID，禁止全局搜索');
   const seenIds = new Set();
   
   const englishKeyword = (aiResult && aiResult.searchKeyword) || keyword;
@@ -1530,7 +1531,8 @@ async function fetchProductsFromAPI(keyword, aiResult, options) {
       keyWord: keyWord,
       searchType: 3
     };
-    if (catIds && catIds.length > 0) bizParams.categoryIdList = catIds;
+    if (!catIds || catIds.length === 0) throw new Error('缺少类目ID，禁止全局搜索');
+    bizParams.categoryIdList = catIds.join(',');
     const result = await callOzonSearch(bizParams);
     if (!result || !result.list || result.list.length === 0) {
       throw new Error('官方接口返回空列表');
@@ -1568,7 +1570,7 @@ async function fetchProductsFromAPI(keyword, aiResult, options) {
     for (const expWord of expandWords) {
       if (allProducts.length >= 60) break;
       try {
-        const searchResult = await trySearchOneSource(expWord, 30);
+        const searchResult = await trySearchOneSource(expWord, 30, categoryIdList);
         if (searchResult && searchResult.list && Array.isArray(searchResult.list)) {
           const products = processOzonProducts(
             searchResult.list,
@@ -1593,7 +1595,7 @@ async function fetchProductsFromAPI(keyword, aiResult, options) {
     for (const ruWord of russianKeywords.slice(0, 2)) {
       if (allProducts.length >= 30) break;
       try {
-        const searchResult = await trySearchOneSource(ruWord, 30);
+        const searchResult = await trySearchOneSource(ruWord, 30, categoryIdList);
         if (searchResult && searchResult.list && Array.isArray(searchResult.list)) {
           const products = processOzonProducts(
             searchResult.list,
@@ -1618,7 +1620,7 @@ async function fetchProductsFromAPI(keyword, aiResult, options) {
     for (const cnWord of chineseKeywords.slice(0, 1)) {
       if (allProducts.length >= 30) break;
       try {
-        const searchResult = await trySearchOneSource(cnWord, 30);
+        const searchResult = await trySearchOneSource(cnWord, 30, categoryIdList);
         if (searchResult && searchResult.list && Array.isArray(searchResult.list)) {
           const products = processOzonProducts(
             searchResult.list,
@@ -1642,7 +1644,7 @@ async function fetchProductsFromAPI(keyword, aiResult, options) {
   if (allProducts.length === 0 && keyword && String(keyword).trim()) {
     console.log('[终极兜底] 用原始 query 重试:', keyword);
     try {
-      const searchResult = await trySearchOneSource(keyword, 30);
+      const searchResult = await trySearchOneSource(keyword, 30, categoryIdList);
       if (searchResult && searchResult.list && Array.isArray(searchResult.list)) {
         const products = processOzonProducts(
           searchResult.list,
@@ -1839,6 +1841,7 @@ async function doSearch() {
   const step1LiveDetail = step1Live.querySelector('.ai-step-detail');
   const analysisSubEl = document.getElementById('analysis-sub');
   
+  const categoryPromise = callCozeCategoryBot(query);
   const cozeData = await callCozeSearchAnalysis(query, (delta, fullText) => {
     // 顶部副标题只显示简洁状态
     if (analysisSubEl) {
@@ -2154,100 +2157,32 @@ async function doSearch() {
   let apiErrorMessage = '';
   const apiStartTime = performance.now();
   
-  // 优先使用扣子返回的 products（v3 精简结构）
-  if (aiResult && Array.isArray(aiResult.products) && aiResult.products.length > 0) {
-    console.log('[数据源] 使用扣子智能体直接返回的商品数据，共', aiResult.products.length, '条');
-    // v3 字段映射：title/cn/cat/img/url/price/priceCny/sales/volume/seller/brand/isFbo/sellerType
-    products = aiResult.products.map(item => {
-      const subject = fixRussianEncoding(item.title || item.subject || '');
-      const subjectCn = fixRussianEncoding(item.cn || item.subjectCn || '');
-      const sellerType = item.sellerType !== undefined ? item.sellerType : (item.companyType || 0);
-      const workingMode = item.isFbo ? 'FBO' : (item.workingMode || '');
-      const brand = fixRussianEncoding(item.brand || '');
-      const cat = item.cat || (item.levelName ? fixRussianEncoding(item.levelName).split('>').pop().trim() : '');
-      const price = item.price || 0;
-      const priceCny = item.priceCny || item.priceRmb || 0;
-      const sales = item.sales || item.saleQuantity30d || 0;
-      const volume = item.volume || item.saleVolume30d || 0;
-      const img = item.img || item.image || '';
-      const url = item.url || item.offerUrl || '';
-      const id = item.id || item.offerId || '';
-      
-      let relevanceScore = 0;
-      let chineseMatch = false;
-      let russianMatch = false;
-      const core = (aiResult.coreProduct || '').toLowerCase();
-      if (core && (subject.toLowerCase().includes(core) || subjectCn.toLowerCase().includes(core))) relevanceScore += 10;
-      // 中文关键词命中加分
-      for (const cnKw of (aiResult.chineseKeywords || [])) {
-        if (cnKw && subjectCn.toLowerCase().includes(cnKw.toLowerCase())) {
-          relevanceScore += 8;
-          chineseMatch = true;
-        }
-      }
-      // 俄语关键词命中加分
-      for (const ruKw of (aiResult.russianKeywords || [])) {
-        if (ruKw && subject.toLowerCase().includes(ruKw.toLowerCase())) {
-          relevanceScore += 6;
-          russianMatch = true;
-        }
-      }
-      relevanceScore += Math.min(2, Math.log10(sales + 1) / 3);
-      
-      return {
-        id: String(id),
-        title: subject,
-        titleCn: subjectCn,
-        price: price,
-        priceRmb: priceCny,
-        sales: sales,
-        saleVolume30d: volume,
-        saleVolume30dRate: 0,
-        score: 0,
-        ratingNum: 0,
-        img: img,
-        link: url,
-        category: cat,
-        typeId: String(item.typeId || ''),
-        categoryName: cat,
-        companyType: sellerType,
-        workingMode: workingMode,
-        brand: brand,
-        matchedByChinese: chineseMatch,
-        matchedByRussian: russianMatch,
-        _relevance: relevanceScore,
-        _raw: item
-      };
-    });
-    
-    // 统计类目分布
-    const catMap = {};
-    products.forEach(p => {
-      const cat = (p.categoryName || '').split('>').pop().trim();
-      if (cat) {
-        catMap[cat] = (catMap[cat] || 0) + 1;
-      }
-    });
-    const total = products.length;
-    categoryStats = Object.entries(catMap)
-      .map(([name, count]) => ({ id: name, name, count, ratio: Math.round((count / total) * 100) }))
-      .sort((a, b) => b.count - a.count);
-    
-  } else {
-    // fallback: 前端自己调用 MCP API
-    console.log('[数据源] 扣子未返回商品数据，使用前端 MCP API 调用');
-    try {
-      const result = await fetchProductsFromAPI(query, aiResult);
-      products = result.products || [];
-      categoryStats = result.categoryStats || [];
-    } catch (e) {
-      console.warn('API调用失败:', e.message);
-      apiErrorMessage = e.message || '未知错误';
+  // 类目优先：必须先取得类目，再在类目范围内搜索商品
+  try {
+    window.__lastAiResult = aiResult;
+    currentCategoryTree = await categoryPromise;
+    excludedCategoryIds.clear();
+    renderCategoryChips();
+
+    if (!currentCategoryTree.length) {
+      throw new Error('未获取到有效类目，已停止商品搜索');
     }
+
+    const categoryIdList = currentCategoryTree.map(c => c.id).filter(Boolean).slice(0, 20);
+    console.log('[类目优先] 搜索类目:', currentCategoryTree);
+    const result = await fetchProductsFromAPI(query, aiResult, { categoryIdList });
+    products = result.products || [];
+    categoryStats = result.categoryStats || [];
+    window._debugRaw = 'categoryIdList=' + categoryIdList.join(',');
+
+    if (!products.length) apiErrorMessage = '所选类目内暂无匹配商品';
+  } catch (e) {
+    console.warn('[类目优先] 搜索失败:', e.message);
+    apiErrorMessage = e.message || '类目搜索失败';
+    products = [];
+    categoryStats = [];
   }
-  window._lastApiError = apiErrorMessage;
-  try { window.__lastAiResult = (aiResult && typeof aiResult === 'object') ? aiResult : window.__lastAiResult; currentCategoryTree = await callCozeCategoryBot(query); excludedCategoryIds.clear(); renderCategoryChips(); if (currentCategoryTree.length > 0) { const allIds = currentCategoryTree.map(c => c.id); const catResult = await fetchProductsFromAPI(query, aiResult, { categoryIdList: allIds }); if (catResult && Array.isArray(catResult.products) && catResult.products.length > 0) { products = catResult.products; categoryStats = catResult.categoryStats || []; window._debugRaw = 'categoryIdList=' + allIds.length; } } } catch (e) { console.warn('[CategoryBot] 合并重搜失败:', e.message); }
-  apiDuration = performance.now() - apiStartTime;
+  window._lastApiError = apiErrorMessage;  apiDuration = performance.now() - apiStartTime;
   console.log('[耗时统计] OZON API:', formatDuration(apiDuration));
   updateTimingDisplay({ agent: agentDuration, api: apiDuration, total: performance.now() - totalStartTime });
   
@@ -2272,8 +2207,7 @@ async function doSearch() {
     const searchWords = russianKeywords.slice(0, 2);
     if (expanded.length > 0) searchWords.push(...expanded.slice(0, 2));
     const displaySearch = searchWords.join('、');
-    const isFromCoze = aiResult && Array.isArray(aiResult.products) && aiResult.products.length > 0;
-    const sourceLabel = isFromCoze ? '智能体调用API' : '实时API';
+    const sourceLabel = '类目限定API';
     updateStep(step4, '✅', 'Step 4: OZON商品搜索完成',
       '搜索词：' + displaySearch + ' · 从OZON实时获取 ' + products.length + ' 条商品数据',
       [sourceLabel, products.length + '件商品']
