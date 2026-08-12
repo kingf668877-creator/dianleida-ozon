@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -1508,7 +1508,7 @@ function processOzonProducts(items, excludedKeywords, requiredKeywords, coreProd
 async function fetchProductsFromAPI(keyword, aiResult, options) {
   const allProducts = [];
   const opts = options || {};
-  const categoryIdList = Array.isArray(opts.categoryIdList) ? opts.categoryIdList.map(String).filter(Boolean).slice(0, 20) : [];
+  const categoryIdList = Array.isArray(opts.categoryIdList) ? opts.categoryIdList.map(String).filter(Boolean).slice(0, 2) : [];
   if (categoryIdList.length === 0) throw new Error('缺少类目ID，禁止全局搜索');
   const seenIds = new Set();
   
@@ -2177,7 +2177,7 @@ async function doSearch() {
       throw new Error('未获取到有效类目，已停止商品搜索');
     }
 
-    const categoryIdList = currentCategoryTree.map(c => c.id).filter(Boolean).slice(0, 20);
+    const categoryIdList = currentCategoryTree.map(c => c.id).filter(Boolean).slice(0, 2);
     console.log('[类目优先] 搜索类目:', currentCategoryTree);
     const result = await fetchProductsFromAPI(query, aiResult, { categoryIdList });
     products = result.products || [];
@@ -2477,4 +2477,4 @@ window.doSearch=doSearch;window.fetchProductsFromAPI=fetchProductsFromAPI;window
 </script>
 </body>
 </html>
-
+
