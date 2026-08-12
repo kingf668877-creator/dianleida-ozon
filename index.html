@@ -1380,7 +1380,7 @@ function showCategoryEmptyHint() {
   currentResults = [];
   document.getElementById('products-count').textContent = '0 件';
 }
-function callCozeSearchAnalysis(query, onStreamDelta) {
+async function callCozeSearchAnalysis(query, onStreamDelta) {
   if (!USE_COZE_AGENT || !COZE_API_TOKEN) return { result: null, agentTime: 0 };
   
   COZE_DEBUG_LOG = [];
