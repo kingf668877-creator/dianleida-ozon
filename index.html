@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -2178,30 +2178,54 @@ async function doSearch() {
     }
 
     console.log('[类目优先] 搜索类目:', currentCategoryTree);
+    // 店雷达开放接口的 categoryIdList 最多只接受 1 个类目 ID（超过即 code=401）。
+    // 这里并行对每个 chip 调用一次 fetchProductsFromAPI，合并去重。
     const seenIds = new Set();
     const allProducts = [];
     let mergedStats = [];
-    for (const cat of currentCategoryTree) {
-      if (!cat || !cat.id || excludedCategoryIds.has(cat.id)) continue;
-      try {
-        const result = await fetchProductsFromAPI(query, aiResult, { categoryIdList: [cat.id] });
-        const list = result.products || [];
-        for (const p of list) {
-          if (!seenIds.has(p.id)) {
-            seenIds.add(p.id);
-            allProducts.push(p);
-          }
+
+    async function searchOneCategory(catId) {
+      let lastErr = null;
+      for (let retry = 0; retry < 3; retry++) {
+        try {
+          return await fetchProductsFromAPI(query, aiResult, { categoryIdList: [catId] });
+        } catch (e) {
+          lastErr = e;
+          console.warn('[类目循环] 类目 ' + catId + ' 第 ' + (retry + 1) + ' 次失败: ' + e.message);
+          await new Promise(function (s) { setTimeout(s, 400); });
         }
-        if (Array.isArray(result.categoryStats)) {
-          mergedStats = mergedStats.concat(result.categoryStats);
+      }
+      throw lastErr || new Error('类目 ' + catId + ' 搜索失败');
+    }
+
+    const activeCats = currentCategoryTree.filter(function (c) {
+      return c && c.id && !excludedCategoryIds.has(c.id);
+    });
+    console.log('[类目循环] 共 ' + activeCats.length + ' 个类目将并行搜索:', activeCats.map(function (c) { return c.id; }).join(','));
+
+    const results = await Promise.all(activeCats.map(function (cat) {
+      return searchOneCategory(cat.id).catch(function (e) {
+        console.warn('[类目循环] 类目 ' + cat.id + ' 最终失败: ' + e.message);
+        return { products: [], categoryStats: [] };
+      });
+    }));
+
+    for (const r of results) {
+      const list = (r && r.products) || [];
+      for (const p of list) {
+        if (!seenIds.has(p.id)) {
+          seenIds.add(p.id);
+          allProducts.push(p);
         }
-      } catch (e) {
-        console.warn('[类目循环] 类目 ' + cat.id + ' 搜索失败:', e.message);
+      }
+      if (r && Array.isArray(r.categoryStats)) {
+        mergedStats = mergedStats.concat(r.categoryStats);
       }
     }
+
     products = allProducts;
     categoryStats = mergedStats;
-    window._debugRaw = 'categoryIdList=' + currentCategoryTree.map(c => c.id).filter(Boolean).join(',');
+    window._debugRaw = 'categoryIdList=' + activeCats.map(function (c) { return c.id; }).join(',');
 
     if (!products.length) apiErrorMessage = '所选类目内暂无匹配商品';
   } catch (e) {
