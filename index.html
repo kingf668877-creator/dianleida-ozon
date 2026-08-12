@@ -2254,7 +2254,11 @@ async function doSearch() {
   // 更新 Step 3: 类目分布分析结果
   if (categoryStats.length > 0) {
     const topCat = categoryStats[0];
-    const catTags = categoryStats.map(c => '类目' + c.id + ' (' + c.ratio + '%)');
+    const catTags = categoryStats.map(c => {
+      const fullName = fixRussianEncoding(String(c.name || '')).trim();
+      const leafName = fullName.split('>').map(part => part.trim()).filter(Boolean).pop() || '类目';
+      return leafName + '（ID: ' + c.id + '）' + c.ratio + '%';
+    });
     updateStep(step3, '✅', 'Step 3: 类目分布分析', 
       '共覆盖 ' + categoryStats.length + ' 个类目 · Top类目占比 ' + topCat.ratio + '%',
       catTags
