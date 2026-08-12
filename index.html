@@ -930,7 +930,7 @@ function generateNonceStr() {
 function buildSign(params, appSecret) {
   // 1. 除 sign 外按 key 字典排序，空值不参与签名
   const sortedKeys = Object.keys(params).filter(k => k !== 'sign' && params[k] !== '' && params[k] !== null && params[k] !== undefined).sort();
-  const sortedStr = sortedKeys.map(k => k + '=' + params[k]).join('&');
+  const sortedStr = sortedKeys.map(k => { const v = Array.isArray(params[k]) ? '[' + params[k].join(',') + ']' : params[k]; return k + '=' + v; }).join('&');
   // 2. appSecret 加首尾：appSecret={value}&{sorted_params}&appSecret={value}
   const signStr = 'appSecret=' + appSecret + '&' + sortedStr + '&appSecret=' + appSecret;
   // 3. MD5 小写
@@ -1278,19 +1278,28 @@ function extractJSON(text) {
 
 // ===== 类目智能体：返回 categoryTree =====
 async function callCozeCategoryBot(query) {
-  if (!USE_COZE_AGENT || !COZE_API_TOKEN || !COZE_CATEGORY_BOT_ID) return [];
   try {
-    const result = await callCozeBot(COZE_CATEGORY_BOT_ID, query, null);
-    if (!result || typeof result !== 'object') return [];
-    const tree = Array.isArray(result.categoryTree) ? result.categoryTree : [];
-    return tree.map(function (item) {
-      return {
-        id: String(item.category_id || item.categoryId || ''),
-        name: String(item.category_name || item.categoryName || item.name || '').trim()
-      };
-    }).filter(function (item) { return item.id && item.name; }).slice(0, 8);
+    const result = await callOzonSearch({
+      pageIndex: 1,
+      pageSize: 50,
+      keyWord: query,
+      searchType: 3
+    });
+    const counts = new Map();
+    (result.list || []).forEach(function (item) {
+      const id = String(item.typeId || '');
+      const name = fixRussianEncoding(String(item.levelName || '')).trim();
+      if (!id || !name) return;
+      const current = counts.get(id) || { id: id, name: name, count: 0 };
+      current.count++;
+      counts.set(id, current);
+    });
+    return Array.from(counts.values())
+      .sort(function (a, b) { return b.count - a.count; })
+      .slice(0, 8)
+      .map(function (item) { return { id: item.id, name: item.name }; });
   } catch (e) {
-    console.warn('[CategoryBot] 调用失败:', e.message);
+    console.warn('[OZON Category] 获取失败:', e.message);
     return [];
   }
 }
@@ -1532,7 +1541,7 @@ async function fetchProductsFromAPI(keyword, aiResult, options) {
       searchType: 3
     };
     if (!catIds || catIds.length === 0) throw new Error('缺少类目ID，禁止全局搜索');
-    bizParams.categoryIdList = catIds.join(',');
+    bizParams.categoryIdList = catIds;
     const result = await callOzonSearch(bizParams);
     if (!result || !result.list || result.list.length === 0) {
       throw new Error('官方接口返回空列表');
@@ -2468,3 +2477,4 @@ window.doSearch=doSearch;window.fetchProductsFromAPI=fetchProductsFromAPI;window
 </script>
 </body>
 </html>
+
