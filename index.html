@@ -1409,11 +1409,13 @@ async function callCozeSearchAnalysis(query, onStreamDelta) {
   }
 }
 // ===== 处理OZON商品数据 =====
-function processOzonProducts(items, excludedKeywords, requiredKeywords, coreProduct) {
+function processOzonProducts(items, excludedKeywords, requiredKeywords, coreProduct, layerHint, expandedWords, expandedTokenArr) {
   const result = [];
   const excluded = (excludedKeywords || []).map(k => k.toLowerCase());
   const required = (requiredKeywords || []).map(k => k.toLowerCase());
   const core = coreProduct ? coreProduct.toLowerCase() : '';
+  const expWordList = (expandedWords || []).map(function(k){ return (k||'').toLowerCase(); }).filter(Boolean);
+  const expTokens = (expandedTokenArr || []).map(function(k){ return (k||'').toLowerCase(); }).filter(Boolean);
   
   for (const item of items) {
     const subjectRaw = item.subject || '';
@@ -1469,7 +1471,37 @@ function processOzonProducts(items, excludedKeywords, requiredKeywords, coreProd
     relevanceScore += salesScore;
     
     if (item.score) relevanceScore += Math.min(2, item.score / 2.5);
-    
+
+    let layer = (typeof layerHint === 'number' && layerHint >= 1 && layerHint <= 5) ? layerHint : null;
+    if (!layer) {
+      const modArr = (processOzonProducts._modifiersArr || []);
+      const modHits = [];
+      for (const m of modArr) {
+        if (!m) continue;
+        if (title.includes(m.toLowerCase()) || titleCn.includes(m.toLowerCase())) modHits.push(m);
+      }
+      const reqHits = required.filter(function(rq){ return rq && (title.includes(rq) || titleCn.includes(rq)); }).length;
+      const totalMods = modArr.filter(Boolean).length;
+      if (reqHits === 0) layer = 99;
+      else if (totalMods > 0 && modHits.length === totalMods) layer = 1;
+      else if (modHits.length > 0) layer = 4;
+      else layer = 5;
+    }
+    if (layer >= 4 && (expWordList.length || expTokens.length)) {
+      let matchedWord = false;
+      for (const w of expWordList) {
+        if (w && (title.includes(w) || titleCn.includes(w))) { matchedWord = true; break; }
+      }
+      if (matchedWord && layer > 2) layer = 2;
+      else {
+        let matchedTok = false;
+        for (const t of expTokens) {
+          if (t && (title.includes(t) || titleCn.includes(t))) { matchedTok = true; break; }
+        }
+        if (matchedTok && layer > 3) layer = 3;
+      }
+    }
+
     result.push({
       id: String(item.offerId || ''),
       title: subject,
@@ -1491,6 +1523,7 @@ function processOzonProducts(items, excludedKeywords, requiredKeywords, coreProd
       brand: fixRussianEncoding(item.brand || ''),
       matchedByChinese: chineseMatch,
       matchedByRussian: russianMatch,
+      _layer: layer,
       _relevance: relevanceScore,
       _raw: item
     });
@@ -1514,23 +1547,24 @@ async function fetchProductsFromAPI(keyword, aiResult, options) {
   
   const englishKeyword = (aiResult && aiResult.searchKeyword) || keyword;
   const expandedKeywords = (aiResult && aiResult.expandedKeywords) || [];
+  const expandedTokenGroups = (aiResult && aiResult.expandedTokenGroups) || [];
   const russianKeywords = (aiResult && aiResult.russianKeywords) || [];
   const chineseKeywords = (aiResult && aiResult.chineseKeywords) || [];
   const excludedKeywords = (aiResult && aiResult.excludedKeywords) || [];
   const requiredKeywords = (aiResult && aiResult.requiredKeywords) || [];
   const coreProduct = (aiResult && aiResult.coreProduct) || keyword;
-  // 把中文关键词注入 processOzonProducts（用于客户端命中加分）
+  const modifiers = (aiResult && aiResult.modifiers) || {};
+  const allModifiers = []
+    .concat(modifiers.style || []).concat(modifiers.material || [])
+    .concat(modifiers.crowd || []).concat(modifiers.scene || []);
   processOzonProducts._chineseKeywords = chineseKeywords;
-  // 俄语关键词也用于客户端命中（因为 OZON API 不支持俄文 keyWord 搜索）
   processOzonProducts._russianKeywords = russianKeywords;
-  // 主搜索词：优先使用用户输入 query，其次 aiResult.searchKeyword，最后 englishKeyword
+  processOzonProducts._modifiersArr = allModifiers;
+
   const mainSearchKeyword = (keyword && String(keyword).trim()) || englishKeyword;
-  // 扩展搜索词：英文扩展词
-  const extraSearchKeywords = [];
-  if (expandedKeywords.length > 0) {
-    extraSearchKeywords.push(...expandedKeywords.slice(0, 2));
-  }
-  console.log('[搜索策略] 主关键词:', mainSearchKeyword, '扩展词:', extraSearchKeywords);
+  const requiredStr = (requiredKeywords[0] || coreProduct || mainSearchKeyword || '').toString().trim();
+  const expTokensFlat = expandedTokenGroups.reduce(function(arr, g){ return arr.concat((g.tokens || []).filter(Boolean)); }, []);
+  console.log('[五层搜索] 关键词:', mainSearchKeyword, '必含:', requiredKeywords, '扩展:', expandedKeywords, 'tokens:', expTokensFlat, '修饰:', allModifiers);
   // 用一个关键词搜索一次：只调用官方 REST 接口 /api/v1/ozon/search
   // searchType=3 精准匹配
   async function trySearchOneSource(keyWord, pageSize, catIds) {
@@ -1548,128 +1582,94 @@ async function fetchProductsFromAPI(keyword, aiResult, options) {
     }
     return { list: result.list, source: 'open' };
   }
-  // 第一轮：主关键词搜索
-  try {
-    const searchResult = await trySearchOneSource(mainSearchKeyword, 50, categoryIdList);
-    console.log('[搜索数据源] ' + searchResult.source);
-    window._debugRaw = 'mainSearchKeyword=' + mainSearchKeyword + ', rawListCount=' + (searchResult.list ? searchResult.list.length : 0);
-    if (searchResult && searchResult.list && Array.isArray(searchResult.list)) {
-      const products = processOzonProducts(
-        searchResult.list,
-        excludedKeywords,
-        requiredKeywords,
-        coreProduct
-      );
-      window._debugRaw += ', afterProcess=' + products.length;
-      console.log('[调试] 主搜索 raw=' + searchResult.list.length + ', afterProcess=' + products.length);
-      for (const p of products) {
-        if (!seenIds.has(p.id)) {
-          seenIds.add(p.id);
-          allProducts.push(p);
-        }
-      }
-    }
-  } catch (e) {
-    console.warn('第一轮搜索失败 [' + mainSearchKeyword + ']:', e.message);
-    window._debugRaw = 'mainSearch FAILED: ' + e.message;
-  }
-  // 第二轮：扩展词搜索（不加类目过滤，最多 2 个扩展词）
-  if (extraSearchKeywords.length > 0 && allProducts.length < 60) {
-    const expandWords = extraSearchKeywords.slice(0, 2);
-    for (const expWord of expandWords) {
-      if (allProducts.length >= 60) break;
+  async function runLayer(layerNum, keyWords, pageSize) {
+    const layerProducts = [];
+    for (const kw of keyWords) {
+      if (!kw) continue;
       try {
-        const searchResult = await trySearchOneSource(expWord, 30, categoryIdList);
-        if (searchResult && searchResult.list && Array.isArray(searchResult.list)) {
-          const products = processOzonProducts(
-            searchResult.list,
-            excludedKeywords,
-            [],
-            coreProduct
-          );
-          for (const p of products) {
-            if (!seenIds.has(p.id)) {
-              seenIds.add(p.id);
-              allProducts.push(p);
-            }
-          }
-        }
-      } catch (e) {
-        console.warn('扩展词搜索失败 [' + expWord + ']:', e.message);
-      }
-    }
-  }
-  // 兜底：如果结果太少，用俄语关键词试试（俄语是 OZON 商品的原语种，匹配更精准）
-  if (allProducts.length < 5 && russianKeywords && russianKeywords.length > 0) {
-    for (const ruWord of russianKeywords.slice(0, 2)) {
-      if (allProducts.length >= 30) break;
-      try {
-        const searchResult = await trySearchOneSource(ruWord, 30, categoryIdList);
-        if (searchResult && searchResult.list && Array.isArray(searchResult.list)) {
-          const products = processOzonProducts(
-            searchResult.list,
-            excludedKeywords,
-            [],
-            coreProduct
-          );
-          for (const p of products) {
-            if (!seenIds.has(p.id)) {
-              seenIds.add(p.id);
-              allProducts.push(p);
-            }
-          }
-        }
-      } catch (e) {
-        console.warn('俄语兜底搜索失败 [' + ruWord + ']:', e.message);
-      }
-    }
-  }
-  // 第二兜底：用中文关键词再试（中文 keyWord 在 MCP 上能用，已实测可搜到 2000 条结果）
-  if (allProducts.length < 5 && chineseKeywords && chineseKeywords.length > 0) {
-    for (const cnWord of chineseKeywords.slice(0, 1)) {
-      if (allProducts.length >= 30) break;
-      try {
-        const searchResult = await trySearchOneSource(cnWord, 30, categoryIdList);
-        if (searchResult && searchResult.list && Array.isArray(searchResult.list)) {
-          const products = processOzonProducts(
-            searchResult.list,
-            excludedKeywords,
-            [],
-            coreProduct
-          );
-          for (const p of products) {
-            if (!seenIds.has(p.id)) {
-              seenIds.add(p.id);
-              allProducts.push(p);
-            }
-          }
-        }
-      } catch (e) {
-        console.warn('中文兜底搜索失败 [' + cnWord + ']:', e.message);
-      }
-    }
-  }
-  // 终极兜底：直接用原始 query 强制重试（如果以上三轮都失败）
-  if (allProducts.length === 0 && keyword && String(keyword).trim()) {
-    console.log('[终极兜底] 用原始 query 重试:', keyword);
-    try {
-      const searchResult = await trySearchOneSource(keyword, 30, categoryIdList);
-      if (searchResult && searchResult.list && Array.isArray(searchResult.list)) {
-        const products = processOzonProducts(
-          searchResult.list,
+        const r = await trySearchOneSource(kw, pageSize, categoryIdList);
+        const items = processOzonProducts(
+          r.list,
           excludedKeywords,
-          [],
-          keyword
+          requiredKeywords,
+          coreProduct,
+          layerNum,
+          expandedKeywords,
+          expTokensFlat
         );
-        for (const p of products) {
-          if (!seenIds.has(p.id)) {
-            seenIds.add(p.id);
-            allProducts.push(p);
-          }
+        for (const p of items) {
+          if (!seenIds.has(p.id)) { seenIds.add(p.id); layerProducts.push(p); }
         }
+      } catch (e) {
+        console.warn('[L' + layerNum + '] 关键词 ' + kw + ' 失败:', e.message);
       }
-    } catch (e) {
-      console.warn('终极兜底搜索失败:', e.message);
+    }
+    return layerProducts;
+  }
+
+  const l1Words = [];
+  if (requiredStr && allModifiers.length > 0) {
+    l1Words.push([requiredStr].concat(allModifiers.slice(0, 4)).join(' ').trim());
+    for (const m of allModifiers.slice(0, 3)) {
+      l1Words.push([requiredStr, m].join(' ').trim());
+    }
+  } else if (requiredStr) {
+    l1Words.push(requiredStr);
+  }
+
+  const l2Words = expandedKeywords.slice(0, 6);
+
+  const l3Words = expandedTokenGroups
+    .map(function(g){ return (g.tokens || []).filter(Boolean).join(' ').trim(); })
+    .filter(Boolean)
+    .slice(0, 6);
+
+  const l4Words = [];
+  if (requiredStr) {
+    for (const m of allModifiers.slice(3, 8)) {
+      l4Words.push([requiredStr, m].join(' ').trim());
+    }
+    if (l4Words.length === 0 && allModifiers[0]) {
+      l4Words.push([requiredStr, allModifiers[0]].join(' ').trim());
+    }
+  }
+
+  const l5Words = [];
+  if (requiredStr) l5Words.push(requiredStr);
+  if (l5Words.length === 0 && mainSearchKeyword) l5Words.push(mainSearchKeyword);
+
+  console.log('[五层搜索] L1=' + l1Words.length + ' L2=' + l2Words.length + ' L3=' + l3Words.length + ' L4=' + l4Words.length + ' L5=' + l5Words.length);
+
+  const layerResults = [];
+  layerResults.push({ layer: 1, products: await runLayer(1, l1Words, 30) });
+  layerResults.push({ layer: 2, products: await runLayer(2, l2Words, 30) });
+  layerResults.push({ layer: 3, products: await runLayer(3, l3Words, 25) });
+  layerResults.push({ layer: 4, products: await runLayer(4, l4Words, 25) });
+  layerResults.push({ layer: 5, products: await runLayer(5, l5Words, 25) });
+
+  for (const lr of layerResults) {
+    for (const p of lr.products) allProducts.push(p);
+  }
+
+  if (allProducts.length < 5) {
+    const fallbackWords = []
+      .concat((russianKeywords || []).slice(0, 2))
+      .concat((chineseKeywords || []).slice(0, 2))
+      .concat([keyword])
+      .filter(function(w){ return w && String(w).trim(); });
+    const seenWords = new Set();
+    const uniq = fallbackWords.filter(function(w){ const k = String(w).trim().toLowerCase(); if (seenWords.has(k)) return false; seenWords.add(k); return true; });
+    for (const fw of uniq) {
+      try {
+        const r = await trySearchOneSource(fw, 30, categoryIdList);
+        const items = processOzonProducts(r.list, excludedKeywords, requiredKeywords, coreProduct, 5, expandedKeywords, expTokensFlat);
+        for (const p of items) {
+          if (!seenIds.has(p.id)) { seenIds.add(p.id); allProducts.push(p); }
+        }
+        if (allProducts.length >= 20) break;
+      } catch (e) {
+        console.warn('[终极兜底] ' + fw + ' 失败:', e.message);
+      }
     }
   }
   
@@ -1697,6 +1697,14 @@ async function fetchProductsFromAPI(keyword, aiResult, options) {
   
   console.log('[类目分布]', topCategories);
   
+  allProducts.sort(function(a, b) {
+    const layerDiff = (a._layer || 99) - (b._layer || 99);
+    if (layerDiff !== 0) return layerDiff;
+    const relDiff = (b._relevance || 0) - (a._relevance || 0);
+    if (Math.abs(relDiff) > 0.01) return relDiff;
+    return (b.sales || 0) - (a.sales || 0);
+  });
+
   return {
     products: allProducts,
     categoryId: '',
