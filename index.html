@@ -981,7 +981,7 @@ async function callOzonSearch(bizParams) {
 // ===== 扣子智能体配置 =====
 const USE_COZE_AGENT = true;
 const COZE_BOT_ID = '7665184702596169782';
-const COZE_CATEGORY_BOT_ID = '7672668826404290603';
+const COZE_CATEGORY_BOT_ID = '';
 const COZE_API_TOKEN = 'sat_M2oVUcRcmShLQVJuvMdLm7K7DSxC9KvvuZI8Yj9eqt4uSvelfMmeMsYSGqveGK1m';
 const COZE_API_URL = 'https://api.coze.cn/v3/chat';
 // ===== 调用扣子智能体API（流式）=====
@@ -2174,7 +2174,18 @@ async function doSearch() {
     renderCategoryChips();
 
     if (!currentCategoryTree.length) {
-      throw new Error('未获取到有效类目，已停止商品搜索');
+      // 类目智能体已停用：兜底使用 6 个高频服装类目，避免无类目时直接抛错
+      currentCategoryTree = [
+        { id: '93175', name: '服装>服装>西装上衣' },
+        { id: '93092', name: '服装>服装>开襟衫' },
+        { id: '93082', name: '服装>服装>雨衣' },
+        { id: '93048', name: '服装>服装>短衫' },
+        { id: '93166', name: '服装>服装>大衣' },
+        { id: '970851878', name: '服装>工作服>防蚊服' }
+      ];
+      excludedCategoryIds.clear();
+      renderCategoryChips();
+      console.warn('[类目优先] 类目智能体已停用，使用默认服装类目');
     }
 
     console.log('[类目优先] 搜索类目:', currentCategoryTree);
