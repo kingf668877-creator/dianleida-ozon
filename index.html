@@ -1490,17 +1490,18 @@ async function fetchProductsFromAPI(keyword, aiResult, options) {
   const seenIds = new Set();
   
   const englishKeyword = (aiResult && aiResult.searchKeyword) || keyword;
-  const expandedKeywords = (aiResult && aiResult.expandedKeywords) || [];
-  const expandedTokenGroups = (aiResult && aiResult.expandedTokenGroups) || [];
-  const russianKeywords = (aiResult && aiResult.russianKeywords) || [];
-  const chineseKeywords = (aiResult && aiResult.chineseKeywords) || [];
-  const excludedKeywords = (aiResult && aiResult.excludedKeywords) || [];
-  const requiredKeywords = (aiResult && aiResult.requiredKeywords) || [];
-  const coreProduct = (aiResult && aiResult.coreProduct) || keyword;
+  var kwFlat = function(k){ if(!k) return ''; if(typeof k==='string') return k; if(typeof k==='object'){ return k.zh || k.ru || k.en || k.word || k.keywords || ''; } return String(k); };
+  const expandedKeywords = ((aiResult && aiResult.expandedKeywords) || []).map(kwFlat).filter(Boolean);
+  const expandedTokenGroups = ((aiResult && aiResult.expandedTokenGroups) || []).map(function(g){ if(!g||typeof g!=='object') return {word:'',tokens:[]}; var toks=(g.tokens||[]).map(kwFlat).filter(Boolean); return {word: kwFlat(g.word||g.zh||g.ru||g.en||g), tokens: toks}; });
+  const russianKeywords = ((aiResult && aiResult.russianKeywords) || []).map(kwFlat).filter(Boolean);
+  const chineseKeywords = ((aiResult && aiResult.chineseKeywords) || []).map(kwFlat).filter(Boolean);
+  const excludedKeywords = ((aiResult && aiResult.excludedKeywords) || []).map(kwFlat).filter(Boolean);
+  const requiredKeywords = ((aiResult && aiResult.requiredKeywords) || []).map(kwFlat).filter(Boolean);
+  const coreProduct = kwFlat((aiResult && aiResult.coreProduct) || keyword);
   const modifiers = (aiResult && aiResult.modifiers) || {};
   const allModifiers = []
     .concat(modifiers.style || []).concat(modifiers.material || [])
-    .concat(modifiers.crowd || []).concat(modifiers.scene || []);
+    .concat(modifiers.crowd || []).concat(modifiers.scene || []).map(kwFlat).filter(Boolean);
   processOzonProducts._chineseKeywords = chineseKeywords;
   processOzonProducts._russianKeywords = russianKeywords;
   processOzonProducts._modifiersArr = allModifiers;
@@ -2557,7 +2558,7 @@ window.classifyLayer = classifyLayerGlobal;
 </script>
 </body>
 </html>
-
+
 
 
 
