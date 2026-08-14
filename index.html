@@ -1472,7 +1472,7 @@ function processOzonProducts(items, excludedKeywords, requiredKeywords, coreProd
   try {
     var an = processOzonProducts._lastAnalysis || null;
     if (an && typeof window.applyCrossLangLayers === 'function') {
-      var reranked = window.applyCrossLangLayers(result, an);
+      var reranked = window.applyCrossLangLayers(result.slice(), an);
       if (Array.isArray(reranked) && reranked.length > 0) {
         result.length = 0;
         reranked.forEach(x => result.push(x));
