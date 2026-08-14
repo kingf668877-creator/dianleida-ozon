@@ -1285,6 +1285,7 @@ async function callCozeCategoryBot(query) {
       keyWord: query,
       searchType: 3
     });
+    window.__globalSearchCache = (result.list || []).slice(0, 300);
     const counts = new Map();
     (result.list || []).forEach(function (item) {
       const id = String(item.typeId || '');
@@ -2131,12 +2132,12 @@ async function doSearch() {
     if (!currentCategoryTree.length) {
       // 类目智能体已停用：兜底使用 6 个高频服装类目，避免无类目时直接抛错
       currentCategoryTree = [
-        { id: '93175', name: '服装>服装>西装上衣' },
-        { id: '93092', name: '服装>服装>开襟衫' },
-        { id: '93082', name: '服装>服装>雨衣' },
-        { id: '93048', name: '服装>服装>短衫' },
-        { id: '93166', name: '服装>服装>大衣' },
-        { id: '970851878', name: '服装>工作服>防蚊服' }
+        { id: '41777492', name: '女装>连衣裙' },
+        { id: '41777494', name: '女装>裙子' },
+        { id: '41777523', name: '女装>女衬衫' },
+        { id: '41777519', name: '女装>连体裤' },
+        { id: '41777482', name: '女装>大衣' },
+        { id: '41777515', name: '女装>西装上衣' }
       ];
       excludedCategoryIds.clear();
       renderCategoryChips();
@@ -2201,6 +2202,20 @@ async function doSearch() {
     categoryStats = mergedStats;
     window._debugRaw = 'categoryIdList=' + activeCats.map(function (c) { return c.id; }).join(',');
 
+    if (!products.length) {
+      var gcache = window.__globalSearchCache || [];
+      if (gcache.length > 0) {
+        var kf = function(k){ if(!k) return ''; if(typeof k==='string') return k; return k.ru || k.zh || k.en || ''; };
+        var reqKw = ((aiResult && aiResult.requiredKeywords) || []).map(kf).filter(Boolean);
+        var exKw = ((aiResult && aiResult.excludedKeywords) || []).map(kf).filter(Boolean);
+        var expKw = ((aiResult && aiResult.expandedKeywords) || []).map(kf).filter(Boolean);
+        var coreP = kf((aiResult && aiResult.coreProduct) || query);
+        try {
+          var items = processOzonProducts(gcache.slice(0, 200), exKw, reqKw, coreP, 5, expKw, []);
+          if (items.length > 0) { products = items; apiErrorMessage = ''; console.log('[全局兜底] 类目搜索为空，使用全局搜索结果 ' + items.length + ' 条'); }
+        } catch (e) { console.warn('[全局兜底] 失败:', e.message); }
+      }
+    }
     if (!products.length) apiErrorMessage = '所选类目内暂无匹配商品';
   } catch (e) {
     console.warn('[类目优先] 搜索失败:', e.message);
