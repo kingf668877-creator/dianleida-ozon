@@ -1409,136 +1409,77 @@ async function callCozeSearchAnalysis(query, onStreamDelta) {
   }
 }
 // ===== 处理OZON商品数据 =====
-function processOzonProducts(items, excludedKeywords, requiredKeywords, coreProduct, layerHint, expandedWords, expandedTokenArr) {
-  const result = [];
-  const excluded = (excludedKeywords || []).map(k => k.toLowerCase());
-  const required = (requiredKeywords || []).map(k => k.toLowerCase());
-  const core = coreProduct ? coreProduct.toLowerCase() : '';
-  const expWordList = (expandedWords || []).map(function(k){ return (k||'').toLowerCase(); }).filter(Boolean);
-  const expTokens = (expandedTokenArr || []).map(function(k){ return (k||'').toLowerCase(); }).filter(Boolean);
-  
-  for (const item of items) {
-    const subjectRaw = item.subject || '';
-    const subject = fixRussianEncoding(subjectRaw);
-    const subjectCnRaw = item.subjectCn || '';
-    const subjectCn = fixRussianEncoding(subjectCnRaw);
-    const levelName = fixRussianEncoding(item.levelName || '');
-    
-    const title = subject.toLowerCase();
-    const titleCn = subjectCn.toLowerCase();
-    
-    let skip = false;
-    for (const ex of excluded) {
-      if (ex.length >= 2 && (title.includes(ex) || titleCn.includes(ex))) { skip = true; break; }
-    }
-    if (skip) continue;
-    
-    if (required.length > 0) {
-      let matchCount = 0;
-      for (const rq of required) {
-        if (!rq) continue;
-        const lowerRq = rq.toLowerCase();
-        if (title.includes(lowerRq) || titleCn.includes(lowerRq)) matchCount++;
-      }
-      // 软化阈值：核心产品词命中 或 中文标题命中任何一个必需词即放行
-      const threshold = required.length <= 2 ? 1 : Math.min(2, Math.ceil(required.length / 2));
-      const coreMatched = core && (title.includes(core) || titleCn.includes(core));
-      if (!coreMatched && matchCount < threshold) continue;
-    }
-    
-    let relevanceScore = 0;
-    if (core && (title.includes(core) || titleCn.includes(core))) relevanceScore += 10;
-    
-    // 中文关键词命中加分（中文关键词仅用于客户端匹配 subjectCn）
-    let chineseMatch = false;
-    for (const cnKw of (processOzonProducts._chineseKeywords || [])) {
-      if (cnKw && titleCn.includes(cnKw.toLowerCase())) {
-        relevanceScore += 8;
-        chineseMatch = true;
-      }
-    }
-    
-    // 俄语关键词命中加分（俄语关键词仅用于客户端匹配 subject，俄语编码）
-    let russianMatch = false;
-    for (const ruKw of (processOzonProducts._russianKeywords || [])) {
-      if (ruKw && title.includes(ruKw.toLowerCase())) {
-        relevanceScore += 6;
-        russianMatch = true;
-      }
-    }
-    
-    const salesScore = Math.min(2, Math.log10((item.saleQuantity30d || 0) + 1) / 3);
-    relevanceScore += salesScore;
-    
-    if (item.score) relevanceScore += Math.min(2, item.score / 2.5);
+function kwToStr(k) {
+  if (!k) return '';
+  if (typeof k === 'string') return k;
+  return k.zh || k.ru || k.en || k.word || k.keywords || '';
+}
 
-    let layer = (typeof layerHint === 'number' && layerHint >= 1 && layerHint <= 5) ? layerHint : null;
-    if (!layer) {
-      const modArr = (processOzonProducts._modifiersArr || []);
-      const modHits = [];
-      for (const m of modArr) {
-        if (!m) continue;
-        if (title.includes(m.toLowerCase()) || titleCn.includes(m.toLowerCase())) modHits.push(m);
-      }
-      const reqHits = required.filter(function(rq){ return rq && (title.includes(rq) || titleCn.includes(rq)); }).length;
-      const totalMods = modArr.filter(Boolean).length;
-      if (reqHits === 0) layer = 99;
-      else if (totalMods > 0 && modHits.length === totalMods) layer = 1;
-      else if (modHits.length > 0) layer = 4;
-      else layer = 5;
-    }
-    if (layer >= 4 && (expWordList.length || expTokens.length)) {
-      let matchedWord = false;
-      for (const w of expWordList) {
-        if (w && (title.includes(w) || titleCn.includes(w))) { matchedWord = true; break; }
-      }
-      if (matchedWord && layer > 2) layer = 2;
-      else {
-        let matchedTok = false;
-        for (const t of expTokens) {
-          if (t && (title.includes(t) || titleCn.includes(t))) { matchedTok = true; break; }
-        }
-        if (matchedTok && layer > 3) layer = 3;
-      }
-    }
+function processOzonProducts(items, excludedKeywords, requiredKeywords, coreProduct, layerHint, expandedWords, expandedTokenArr, relevanceScore, chineseMatch, russianMatch, levelName) {
+  const safeLower = v => (v || '').toLowerCase();
+  function kwToStrLocal(k) { if (!k) return ''; if (typeof k === 'string') return k; return k.zh || k.ru || k.en || k.word || k.keywords || ''; }
+  const excluded = (excludedKeywords || []).map(k => safeLower(kwToStrLocal(k))).filter(Boolean);
+  const required = (requiredKeywords || []).map(k => safeLower(kwToStrLocal(k))).filter(Boolean);
+  const core = safeLower(coreProduct);
+  const expWordList = (expandedWords || []).map(k => safeLower(kwToStrLocal(k))).filter(Boolean);
+  const expTokenArr = (expandedTokenArr || []).map(k => safeLower(kwToStrLocal(k))).filter(Boolean);
 
-    result.push({
-      id: String(item.offerId || ''),
-      title: subject,
-      titleCn: subjectCn,
-      price: item.price || 0,
-      priceRmb: item.priceRmb || 0,
-      sales: item.saleQuantity30d || 0,
-      saleVolume30d: item.saleVolume30d || 0,
-      saleVolume30dRate: item.saleVolume30dRate || 0,
-      score: item.score || 0,
-      ratingNum: item.ratingNum || 0,
-      img: item.image || '',
-      link: item.offerUrl || '',
-      category: levelName,
-      typeId: String(item.typeId || ''),
-      categoryName: levelName,
-      companyType: item.companyType || 0,
-      workingMode: item.workingMode || '',
-      brand: fixRussianEncoding(item.brand || ''),
-      matchedByChinese: chineseMatch,
-      matchedByRussian: russianMatch,
-      _layer: layer,
-      _relevance: relevanceScore,
-      _raw: item
-    });
+  function langHit(title, strOrObj) {
+    if (!strOrObj) return false;
+    if (typeof strOrObj === 'string') return title.includes(safeLower(strOrObj));
+    if (typeof strOrObj === 'object') {
+      var t = { zh: strOrObj.zh || '', ru: strOrObj.ru || '', en: strOrObj.en || '' };
+      return (t.zh && title.includes(safeLower(t.zh))) || (t.ru && title.includes(safeLower(t.ru))) || (t.en && title.includes(safeLower(t.en)));
+    }
+    return false;
   }
-  
+  function allLangsHit(title, arr) { if (!arr || arr.length === 0) return true; return arr.every(k => langHit(title, k)); }
+  function anyLangHit(title, arr) { if (!arr || arr.length === 0) return false; return arr.some(k => langHit(title, k)); }
+  function tokenGroupHit(title, tokenArr) {
+    if (!tokenArr || tokenArr.length === 0) return false;
+    for (var i = 0; i < tokenArr.length; i++) { var t = tokenArr[i]; if (!t) continue; var w = kwToStrLocal(t.word || ''); var toks = Array.isArray(t.tokens) ? t.tokens : []; if (w && title.includes(safeLower(w))) return true; if (toks.length > 0) { var ok = toks.every(tok => tok && title.includes(safeLower(kwToStrLocal(tok)))); if (ok) return true; } }
+    return false;
+  }
+  function expandedHit(title, expWords) { if (!expWords || expWords.length === 0) return false; return expWords.some(w => { var s = kwToStrLocal(w); return s && title.includes(safeLower(s)); }); }
+  function classifyLayer(title, requiredArr, expWords, tokenArr, coreProd, modifiersArr) {
+    var reqArr = (requiredArr || []).filter(k => kwToStrLocal(k) !== '');
+    if (reqArr.length > 0 && allLangsHit(title, reqArr)) return 1;
+    if (expandedHit(title, expWords)) return 2;
+    if (tokenGroupHit(title, tokenArr)) return 3;
+    var anyReq = anyLangHit(title, reqArr); var hasMod = anyLangHit(title, modifiersArr || []);
+    if (anyReq && hasMod) return 4; if (coreProd && title.includes(safeLower(kwToStrLocal(coreProd)))) return 5;
+    if (anyReq) return 5; return 99;
+  }
+
+  const result = [];
+  for (const item of items) {
+    const subject = item.subject || item.subjectCn || ''; const subjectCn = item.subjectCn || item.subject || '';
+    const combined = (subject + ' ' + subjectCn).toLowerCase();
+    var excludedHit = false; for (var ei = 0; ei < excluded.length; ei++) { if (excluded[ei] && combined.includes(excluded[ei])) { excludedHit = true; break; } }
+    if (excludedHit) continue;
+    var modifiersEn = (window.__lastAiResult && window.__lastAiResult.modifiers) ? (window.__lastAiResult.modifiers.en || []) : [];
+    var layer = classifyLayer(combined, required, expWordList, expTokenArr, core, modifiersEn);
+    result.push({ id: String(item.offerId || ''), title: subject, titleCn: subjectCn, price: item.price || 0, priceRmb: item.priceRmb || 0, sales: item.saleQuantity30d || 0, saleVolume30d: item.saleVolume30d || 0, saleVolume30dRate: item.saleVolume30dRate || 0, score: item.score || 0, ratingNum: item.ratingNum || 0, img: item.image || '', link: item.offerUrl || '', category: levelName, typeId: String(item.typeId || ''), categoryName: levelName, companyType: item.companyType || 0, workingMode: item.workingMode || '', brand: fixRussianEncoding(item.brand || ''), matchedByChinese: false, matchedByRussian: false, _layer: layer, _relevance: 100 - layer, _raw: item });
+  }
+
   result.sort((a, b) => {
-    const scoreDiff = (b._relevance || 0) - (a._relevance || 0);
-    if (Math.abs(scoreDiff) > 0.01) return scoreDiff;
+    var ld = (a._layer || 99) - (b._layer || 99); if (ld !== 0) return ld;
+    var rd = (b._relevance || 0) - (a._relevance || 0); if (Math.abs(rd) > 0.01) return rd;
     return (b.sales || 0) - (a.sales || 0);
   });
-  
-  return result;
 
-  // 三语五层二次精排
-  try { var an = processOzonProducts._lastAnalysis || processOzonProducts._analysis || null; if (an && typeof window.applyCrossLangLayers === 'function') { var reranked = window.applyCrossLangLayers(result, an); if (Array.isArray(reranked) && reranked.length > 0) { result.length = 0; reranked.forEach(function(x){ result.push(x); }); } } } catch(e) {}
+  try {
+    var an = processOzonProducts._lastAnalysis || null;
+    if (an && typeof window.applyCrossLangLayers === 'function') {
+      var reranked = window.applyCrossLangLayers(result, an);
+      if (Array.isArray(reranked) && reranked.length > 0) {
+        result.length = 0;
+        reranked.forEach(x => result.push(x));
+      }
+    }
+  } catch(e) {}
+
+  return result;
 }
 // ===== 从OZON MCP获取商品 =====
 async function fetchProductsFromAPI(keyword, aiResult, options) {
@@ -2540,7 +2481,78 @@ document.getElementById('sort-filter').addEventListener('click', function(e) {
 
 
 window.doSearch=doSearch;window.fetchProductsFromAPI=fetchProductsFromAPI;window.renderProducts=renderProducts;window.renderCategoryChips=renderCategoryChips;window.toggleCategory=toggleCategory;window.restoreAllCategories=restoreAllCategories;window.rerunSearchWithCategories=rerunSearchWithCategories;window.showCategoryEmptyHint=showCategoryEmptyHint;window.callCozeCategoryBot=callCozeCategoryBot; ;
-// ===== 三语跨语言五层匹配（用户上传规则）=====\nfunction normalizeText(v){ try { return fixRussianEncoding(String(v||'')).toLowerCase().replace(/[\p{P}\p{S}]/gu,' ').replace(/\s+/g,' ').trim(); } catch(e){ return String(v||'').toLowerCase().trim(); } }\nfunction toTri(v){ if(v && typeof v==='object' && !Array.isArray(v)) return { zh:(v.zh||''), ru:(v.ru||''), en:(v.en||'') }; return { zh:String(v||''), ru:'', en:'' }; }\nfunction langHit(title, kw){ const k=toTri(kw); const zh=normalizeText(k.zh), ru=normalizeText(k.ru), en=normalizeText(k.en); return { hit: (zh && title.includes(zh)) || (ru && title.includes(ru)) || (en && title.includes(en)), zh:!!zh, ru:!!ru, en:!!en }; }\nfunction allModsArray(mods){ const m=mods||{}; const arr=[]; (m.style||[]).forEach(x=>arr.push(x)); (m.material||[]).forEach(x=>arr.push(x)); (m.crowd||[]).forEach(x=>arr.push(x)); (m.scene||[]).forEach(x=>arr.push(x)); (m.brand||[]).forEach(x=>arr.push(x)); return arr; }\nfunction allRequiredHit(title, required){ const req=(required||[]).filter(Boolean); if(req.length===0) return true; return req.every(function(r){ if(r && typeof r==='object'){ return langHit(title, r).hit; } var t=normalizeText(r); return t && title.includes(t); }); }\nfunction countLangHits(title, kw){ const k=toTri(kw); const zh=normalizeText(k.zh), ru=normalizeText(k.ru), en=normalizeText(k.en); let c=0; if(zh && title.includes(zh)) c++; if(ru && title.includes(ru)) c++; if(en && title.includes(en)) c++; return c; }\nfunction tokenGroupHit(title, group){ if(!group) return false; const langs=['zh','ru','en']; for(let i=0;i<langs.length;i++){ const l=langs[i]; const t=group[l]||group; const toks=(t && t.tokens)||[]; if(!Array.isArray(toks) || toks.length===0) continue; const ns=toks.map(normalizeText).filter(Boolean); if(ns.length===0) continue; if(ns.every(function(x){ return title.includes(x); })) return true; } return false; }\nfunction expandedHit(title, ek){ const k=toTri(ek); const zh=normalizeText(k.zh), ru=normalizeText(k.ru), en=normalizeText(k.en); return (zh && title.includes(zh)) || (ru && title.includes(ru)) || (en && title.includes(en)); }\nfunction classifyLayer(title, analysis){ const a=analysis||{}; const req=a.requiredKeywords||[]; const mods=allModsArray(a.modifiers); const exp=a.expandedKeywords||[]; const tokenGroups=a.expandedTokenGroups||[]; const titleNorm=normalizeText(title); const reqOk=allRequiredHit(titleNorm, req); const allModOk=mods.length===0 ? true : mods.every(function(m){ return langHit(titleNorm, m).hit; }); const someModOk=mods.length===0 ? true : mods.some(function(m){ return langHit(titleNorm, m).hit; }); const l2Hit=exp.some(function(k){ return expandedHit(titleNorm, k); }); const l3Hit=tokenGroups.some(function(g){ return tokenGroupHit(titleNorm, g); }); if(reqOk && allModOk && (mods.length>0 || exp.length>0)) return 1; if(l2Hit) return 2; if(reqOk && l3Hit) return 3; if(reqOk && someModOk) return 4; if(reqOk) return 5; return 99; }\nfunction layerScore(title, analysis, layer){ if(layer>=99) return 0; let s=0; const mods=allModsArray(analysis.modifiers); for(let i=0;i<mods.length;i++){ s += countLangHits(normalizeText(title), mods[i])*2; } for(let j=0;j<(analysis.requiredKeywords||[]).length;j++){ s += countLangHits(normalizeText(title), analysis.requiredKeywords[j]); } if(layer===1) s += 100; else if(layer===2) s += 80; else if(layer===3) s += 60; else if(layer===4) s += 40; else if(layer===5) s += 20; return s; }\nfunction applyCrossLangLayers(products, analysis){ const arr=[]; for(let i=0;i<(products||[]).length;i++){ const p=products[i]; const title=(p && (p.subject || p.title))||''; const titleCn=(p && (p.subjectCn || ''))||''; const combined=normalizeText(title + ' ' + titleCn); const layer=classifyLayer(combined, analysis); if(layer>=99){ arr.push(Object.assign({}, p, { _layer: 99, _relevance: 0 })); continue; } arr.push(Object.assign({}, p, { _layer: layer, _relevance: layerScore(combined, analysis, layer) })); } arr.sort(function(a,b){ const ld=(a._layer||99)-(b._layer||99); if(ld!==0) return ld; const rd=(b._relevance||0)-(a._relevance||0); if(Math.abs(rd)>0.01) return rd; return (b.sales||0)-(a.sales||0); }); return arr; }\nwindow.applyCrossLangLayers=applyCrossLangLayers;window.classifyLayer=classifyLayer;
+// ===== 三语跨语言五层匹配（用户上传规则） =====
+function normalizeText(v) { try { return (v || '').toLowerCase(); } catch(e) { return ''; } }
+
+function toTri(v) {
+  if (!v) return { zh: '', ru: '', en: '' };
+  if (typeof v === 'string') return { zh: v, ru: '', en: '' };
+  return { zh: (v.zh || v.Kh || '').toString(), ru: (v.ru || '').toString(), en: (v.en || '').toString() };
+}
+
+function langHit(title, strOrObj) {
+  if (!strOrObj) return false;
+  if (typeof strOrObj === 'object') {
+    var t = toTri(strOrObj);
+    return (t.zh && title.includes(normalizeText(t.zh))) || (t.ru && title.includes(normalizeText(t.ru))) || (t.en && title.includes(normalizeText(t.en)));
+  }
+  return title.includes(normalizeText(strOrObj));
+}
+
+function allLangsHit(title, arr) { if (!arr || arr.length === 0) return true; return arr.every(k => langHit(title, k)); }
+
+function anyLangHit(title, arr) { if (!arr || arr.length === 0) return false; return arr.some(k => langHit(title, k)); }
+
+function tokenGroupHit(title, tokenArr) {
+  if (!tokenArr || tokenArr.length === 0) return false;
+  for (var i = 0; i < tokenArr.length; i++) {
+    var t = tokenArr[i]; if (!t) continue;
+    var w = kwToStr(t.word || ''); var toks = Array.isArray(t.tokens) ? t.tokens : [];
+    if (w && title.includes(normalizeText(w))) return true;
+    if (toks.length > 0) { var ok = toks.every(tok => tok && title.includes(normalizeText(kwToStr(tok)))); if (ok) return true; }
+  }
+  return false;
+}
+
+function expandedHit(title, expWords) {
+  if (!expWords || expWords.length === 0) return false;
+  return expWords.some(w => { var s = kwToStr(w); return s && title.includes(normalizeText(s)); });
+}
+
+function classifyLayerGlobal(title, analysis) {
+  if (!analysis) return 99;
+  var req = (analysis.requiredKeywords || []).filter(k => kwToStr(k) !== '');
+  var exp = (analysis.expandedKeywords || []); var tokArr = (analysis.expandedTokenGroups || []);
+  var core = (analysis.coreProduct || ''); var mods = (analysis.modifiers && analysis.modifiers.en) ? analysis.modifiers.en : [];
+  if (req.length > 0 && allLangsHit(title, req)) return 1;
+  if (expandedHit(title, exp)) return 2;
+  if (tokenGroupHit(title, tokArr)) return 3;
+  var anyReq = req.some(r => langHit(title, r)); var hasMod = (mods.length > 0) && mods.some(m => langHit(title, m));
+  if (anyReq && hasMod) return 4; if (core && title.includes(normalizeText(kwToStr(core)))) return 5;
+  if (anyReq) return 5; return 99;
+}
+
+function layerScoreGlobal(l) { var m={1:100,2:80,3:60,4:40,5:20,99:0}; return m[l]!==undefined?m[l]:0; }
+
+function applyCrossLangLayers(products, aiResult) {
+  if (!aiResult) return products;
+  var analysis = aiResult || {};
+  (products || []).forEach(function(p) {
+    var title = ((p.title || '') + ' ' + (p.titleCn || '')).toLowerCase();
+    p._layer = classifyLayerGlobal(title, analysis); p._relevance = layerScoreGlobal(p._layer);
+  });
+  return (products || []).sort(function(a, b) {
+    var ld = (a._layer || 99) - (b._layer || 99); if (ld !== 0) return ld;
+    var rd = (b._relevance || 0) - (a._relevance || 0); if (Math.abs(rd) > 0.01) return rd;
+    return (b.sales || 0) - (a.sales || 0);
+  });
+}
+
+function kwToStr(k) { if (!k) return ''; if (typeof k === 'string') return k; return k.zh || k.ru || k.en || k.word || k.keywords || ''; }
+
+window.applyCrossLangLayers = applyCrossLangLayers;
+window.classifyLayer = classifyLayerGlobal;
+// ===== 三语五层匹配结束 =====
 
 </script>
 </body>
